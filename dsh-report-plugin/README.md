@@ -14,8 +14,11 @@
 - 内容去重：段落到表格行级精确去重，可选跨节近似去重
 - 输出校验：封面字段、必备标题、占位符、禁用文本、字数、重复率、超长段落、图片数量
 - 安全边界：输出与图片默认限制在当前工作区内；缺失封面字段会报告，不猜测个人数据
+- Markdown 模板：支持 Markdown 中间格式，Token 消耗更少
 
 ## 安装
+
+**依赖要求**：需要在系统安装 Node.js 和 npm。
 
 在当前 DSH profile 中安装：
 
@@ -23,7 +26,7 @@
 plugin_manager action=install_bundle target=D:\deepseek-harness\default-workspace\dsh-report-plugin
 ```
 
-安装后 Host 工具名为 `report_docx`。插件不引入 npm 运行时依赖；DOCX 渲染使用 DSH 自带 Python 与 `python-docx`。
+安装后 Host 工具名为 `report_docx`。插件使用纯 JavaScript 渲染，无需 Python 依赖。
 
 ## 配置
 

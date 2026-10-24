@@ -6,7 +6,7 @@ import { resolveConfig } from './config.js'
 import { buildPlan, scoreTemplates } from './plan.js'
 import { loadTemplates, publicTemplate } from './templates.js'
 import { buildRenderPayload, buildRenderSections, normalizeSectionsInput } from './content.js'
-import { inspectDocx, pythonInfo, renderDocx } from './render.js'
+import { inspectDocx } from './markdown2docx.js'  // 使用纯 JS 的 inspect
 import { validateBuild } from './validate.js'
 import { ingestHistory } from './history.js'
 import {
@@ -86,6 +86,31 @@ function compactBuild(plan, result) {
       ? 'Review the DOCX visually if layout matters; otherwise deliver this path.'
       : `Fix validation errors, then call action=build with planId=${plan.planId} and only changed sections.`,
   }
+}
+
+function buildMarkdownFromSections(sections, plan, template) {
+  let markdown = `# ${plan.title}\n\n`
+
+  // 封面信息
+  if (plan.cover) {
+    markdown += `## 封面\n\n> **课程名称**：${plan.cover.course || ''}\n`
+    markdown += `> **学生姓名**：${plan.cover.name || ''}\n`
+    markdown += `> **学号**：${plan.cover.studentId || ''}\n`
+    markdown += `> **班级**：${plan.cover.class || ''}\n`
+    markdown += `> **提交日期**：${plan.cover.submitDate || ''}\n\n`
+  }
+
+  markdown += `---\n\n`
+
+  // 遍历章节
+  for (const section of sections) {
+    markdown += `## ${section.title}\n\n`
+    for (const block of section.blocks) {
+      markdown += `${block.text}\n\n`
+    }
+  }
+
+  return markdown
 }
 
 export async function createEngine({ config: rawConfig, workspace, packageDir }) {
@@ -299,22 +324,18 @@ export class Engine {
       })
     }
 
-    const payload = buildRenderPayload({
-      plan,
-      template,
-      sections: built.sections,
-      config: this.config,
-      options,
-      outputPath,
-    })
+    // 生成 Markdown 内容（从 sections 构建）
+    const markdown = buildMarkdownFromSections(built.sections, plan, template)
+    
+    // 直接调用纯 JS 渲染器生成 docx
     let rendered
     try {
-      rendered = await renderDocx(this.config, payload, { cwd: this.workspace })
+      rendered = await markdownToDocx(markdown, outputPath)
     } catch (error) {
       throw new ReportError('RENDER_FAILED', error.message)
     }
     if (!rendered.ok) throw new ReportError('RENDER_FAILED', rendered.error ?? 'renderer failed')
-    const inspect = rendered.inspect ?? await inspectDocx(this.config, outputPath, { cwd: this.workspace })
+    const inspect = await inspectDocx(outputPath)
     const validation = this.config.validation.enabled
       ? validateBuild({ plan, template, result: rendered, inspect, config: this.config, build: built })
       : { ok: true, score: 100, errors: [], warnings: [], checks: [], metrics: inspect }
@@ -369,7 +390,7 @@ export class Engine {
     if (!path) throw new ReportError('PATH_REQUIRED', 'path is required for action=validate')
     const target = isAbsolute(path) ? resolve(path) : resolve(this.workspace, path)
     if (!fileExists(target)) throw new ReportError('FILE_NOT_FOUND', `DOCX not found: ${target}`)
-    const inspect = await inspectDocx(this.config, target, { cwd: this.workspace })
+    const inspect = await inspectDocx(target)
     if (!inspect.ok) throw new ReportError('INSPECT_FAILED', inspect.error ?? 'inspect failed')
     let validation = {
       ok: (inspect.placeholders ?? []).length === 0,
