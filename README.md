@@ -41,6 +41,24 @@
 - `config.pythonPath` 仍可配置，但 v0.2.0 不生效。
 - `tests/acceptance.mjs` 按 v0.1.0 行为编写，v0.2.0 需重跑并按需调整断言。
 
+### v0.2.0 修复公告（2026-10-25）
+
+v0.2.0 发布之初，`markdown2docx` 渲染链路存在多处缺陷，插件可安装但 `plan → build` 无法跑通。现已修复以下 7 个问题：
+
+| 序号 | 问题现象 | 位置 | 修复方式 |
+| --- | --- | --- | --- |
+| 1 | 插件导入即报 `SyntaxError: Unexpected token ')'` | `src/markdown2docx.js` | 删除两处多余右括号 |
+| 2 | `ERR_MODULE_NOT_FOUND: Cannot find package 'docx'` | `package.json` | 安装 `docx@8.5.0` |
+| 3 | 调用 `markdownToDocx` 时报 `is not defined` | `src/engine.js` | import 补充 `markdownToDocx` |
+| 4 | 渲染报 `Cannot read properties of undefined (reading '0')` | `src/markdown2docx.js` | docx v8 的 `Document` 不暴露 `.sections`，改为构造时一次性传入 `children` |
+| 5 | 列表只渲染第一项；列表无编号定义 | `src/markdown2docx.js` | 每项独立成段，并配置 `bullet-list` / `number-list` 编号 |
+| 6 | 校验必报 `DOCX inspect failed`（`Document.fromBuffer` 不存在） | `src/markdown2docx.js` | 重写 `inspectDocx` 为纯 JS：`node:zlib` 解 ZIP + 解析 `word/document.xml`，零新增依赖 |
+| 7 | 封面字段为空、五行挤成一行 | `src/engine.js` | 键名改为 `className`/`date`，每字段独立成段 |
+
+修复后验证：`report_docx action=status` 返回 `ok: true`；实际生成 13 节实验报告（约 2066 字），校验 85 分（唯一缺项为用户未提供的学号/班级）；单次 `build` 渲染 15–22 ms。
+
+> 注意：修改插件源码后需禁用再启用插件（或重启 DSH），宿主才会加载新代码。
+
 ---
 
 ## 能力
