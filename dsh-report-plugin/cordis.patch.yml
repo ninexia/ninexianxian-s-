@@ -1,0 +1,6 @@
+- insert:
+    - id: report-docx
+      name: '@local/dsh-report-docx'
+      config:
+        defaultTemplate: lab-report
+        autoIngest: true

@@ -1,0 +1,228 @@
+{
+  "id": "lab-report",
+  "name": "通用课程实验报告",
+  "description": "适用于软件工程、操作系统、Java EE 等课程实验：封面 + 目的 + 环境 + 内容 + 原理 + 过程与结果 + 问题 + 总结。",
+  "version": 2,
+  "priority": 50,
+  "match": {
+    "keywords": {
+      "实验": 4,
+      "实验报告": 8,
+      "课程": 2,
+      "软工": 2,
+      "Java": 3,
+      "Spring": 3,
+      "操作系统": 3,
+      "进程": 2,
+      "需求": 2,
+      "数据库": 2
+    }
+  },
+  "page": {
+    "size": "A4",
+    "orientation": "portrait",
+    "margins": { "top": 1.0, "bottom": 1.0, "left": 1.1, "right": 1.1 },
+    "headerDistance": 0.45,
+    "footerDistance": 0.45
+  },
+  "styles": {
+    "body": {
+      "latin": "Times New Roman",
+      "eastAsia": "宋体",
+      "size": 10.5,
+      "lineSpacing": 1.3,
+      "spaceAfter": 4,
+      "align": "justify",
+      "firstLineIndent": 0
+    },
+    "h1": {
+      "latin": "Times New Roman",
+      "eastAsia": "黑体",
+      "size": 15,
+      "bold": true,
+      "spaceBefore": 10,
+      "spaceAfter": 6,
+      "keepWithNext": true
+    },
+    "h2": {
+      "latin": "Times New Roman",
+      "eastAsia": "黑体",
+      "size": 13,
+      "bold": true,
+      "spaceBefore": 8,
+      "spaceAfter": 4,
+      "keepWithNext": true
+    },
+    "h3": {
+      "latin": "Times New Roman",
+      "eastAsia": "黑体",
+      "size": 12,
+      "bold": true,
+      "spaceBefore": 6,
+      "spaceAfter": 3,
+      "keepWithNext": true
+    },
+    "caption": {
+      "latin": "Times New Roman",
+      "eastAsia": "楷体",
+      "size": 9,
+      "bold": true,
+      "align": "center",
+      "spaceBefore": 2,
+      "spaceAfter": 2
+    },
+    "table": {
+      "latin": "Times New Roman",
+      "eastAsia": "宋体",
+      "size": 9,
+      "lineSpacing": 1.05
+    },
+    "code": {
+      "latin": "Consolas",
+      "eastAsia": "宋体",
+      "size": 9,
+      "lineSpacing": 1.0
+    }
+  },
+  "cover": {
+    "enabled": true,
+    "layout": "center",
+    "courseSize": 26,
+    "semesterSize": 18,
+    "titleSize": 22,
+    "infoSize": 14,
+    "collegeSize": 14,
+    "spacerLines": 3,
+    "fields": [
+      { "key": "course", "label": "课程名称", "required": true, "default": "软件工程课内实验", "aliases": ["课程", "课程名称"] },
+      { "key": "semester", "label": "学期", "required": false, "default": "2026/2027(1)", "aliases": ["学期", "学年"] },
+      { "key": "experiment", "label": "实验名称", "required": true, "aliases": ["实验名称", "实验题目", "实验"] },
+      { "key": "name", "label": "学生姓名", "required": true, "aliases": ["姓名", "学生姓名"] },
+      { "key": "studentId", "label": "学生学号", "required": true, "aliases": ["学号", "学生学号"] },
+      { "key": "className", "label": "学生班级", "required": true, "aliases": ["班级", "学生班级"] },
+      { "key": "major", "label": "专业", "required": false, "aliases": ["专业"] },
+      { "key": "teacher", "label": "任课教师", "required": false, "aliases": ["教师", "任课教师", "指导老师", "指导教师"] },
+      { "key": "date", "label": "提交日期", "required": true, "aliases": ["日期", "提交日期", "实验日期"] },
+      { "key": "college", "label": "学院", "required": false, "default": "计算机科学与技术学院", "aliases": ["学院", "学校"] }
+    ]
+  },
+  "header": {
+    "enabled": true,
+    "text": "{{course}} · {{experiment}}"
+  },
+  "footer": {
+    "enabled": true,
+    "pageNumber": true
+  },
+  "toc": {
+    "enabled": false,
+    "minSections": 8,
+    "title": "目　　录"
+  },
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "level": 1,
+      "kind": "list",
+      "required": true,
+      "triggers": ["实验目的", "实验目标", "目的", "目标"],
+      "hint": "2—5 条可验证的目标，使用“掌握/理解/能够/设计”等动词。",
+      "minWords": 40,
+      "maxWords": 500
+    },
+    {
+      "id": "environment",
+      "title": "二、实验环境与工具",
+      "level": 1,
+      "kind": "list",
+      "required": true,
+      "triggers": ["实验环境", "运行环境", "环境", "工具", "软件", "硬件", "平台"],
+      "hint": "列出操作系统、语言/框架、IDE、数据库、浏览器等；可用表格。",
+      "minWords": 30,
+      "maxWords": 500
+    },
+    {
+      "id": "content",
+      "title": "三、实验内容与要求",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": true,
+      "triggers": ["实验内容", "实验要求", "任务要求", "内容与要求", "实验任务"],
+      "hint": "忠实转述实验要求，不添加未给出的功能或指标。",
+      "minWords": 50,
+      "maxWords": 1200
+    },
+    {
+      "id": "principle",
+      "title": "四、实验原理",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": false,
+      "triggers": ["实验原理", "原理", "关键 API", "理论基础", "相关技术"],
+      "hint": "解释关键 API、框架机制或算法；代码用 code 块。",
+      "minWords": 60,
+      "maxWords": 2000
+    },
+    {
+      "id": "process",
+      "title": "五、实验过程与结果",
+      "level": 1,
+      "kind": "task-group",
+      "required": true,
+      "triggers": ["实验过程", "实验步骤", "步骤", "实现过程", "操作过程", "过程与结果"],
+      "hint": "按任务或步骤组织；每步写“做什么—怎么做—看到什么”。",
+      "minWords": 120,
+      "maxWords": 6000,
+      "taskPatterns": [
+        "任务\\s*[一二三四五六七八九十0-9]+",
+        "实验任务\\s*[一二三四五六七八九十0-9]+",
+        "第\\s*[一二三四五六七八九十0-9]+\\s*部分"
+      ]
+    },
+    {
+      "id": "problems",
+      "title": "六、遇到的问题与解决",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": false,
+      "triggers": ["问题", "错误", "异常", "解决", "调试", "排错"],
+      "hint": "每条写清现象、原因、定位过程、修复方式和验证结果。",
+      "minWords": 30,
+      "maxWords": 1500
+    },
+    {
+      "id": "summary",
+      "title": "七、实验总结",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": true,
+      "triggers": ["实验总结", "总结", "收获", "体会", "反思"],
+      "hint": "写完成情况、收获、不足与改进；不要重复正文。",
+      "minWords": 80,
+      "maxWords": 1200
+    },
+    {
+      "id": "references",
+      "title": "八、参考资料",
+      "level": 1,
+      "kind": "list",
+      "required": false,
+      "triggers": ["参考资料", "参考文献", "资料"],
+      "hint": "只列实际查阅过的资料。",
+      "minWords": 0,
+      "maxWords": 800
+    },
+    {
+      "id": "appendix",
+      "title": "附录",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": false,
+      "triggers": ["附录", "源码", "完整代码", "运行日志"],
+      "hint": "放置完整源码、长日志、补充截图等。",
+      "minWords": 0,
+      "maxWords": 12000
+    }
+  ]
+}

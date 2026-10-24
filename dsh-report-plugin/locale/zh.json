@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "实验报告 DOCX 生成器",
+    "description": "从实验要求生成或增量更新 DOCX 实验报告，复用历史模板、章节、字段与校验规则。"
+  },
+  "tool": {
+    "name": "report_docx",
+    "description": "按实验要求生成、更新或校验 DOCX 实验报告。"
+  }
+}

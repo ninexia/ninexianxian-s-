@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "Experiment Report DOCX Generator",
+    "description": "Generate or incrementally update DOCX experiment reports from requirements, reusing historical templates, sections, fields, and validation rules."
+  },
+  "tool": {
+    "name": "report_docx",
+    "description": "Generate, update, or validate a DOCX experiment report from requirements."
+  }
+}

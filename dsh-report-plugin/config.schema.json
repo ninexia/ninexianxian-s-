@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.dsh/report-docx/config.schema.json",
+  "title": "Report DOCX plugin configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "defaultTemplate": {
+      "type": "string",
+      "default": "lab-report",
+      "description": "Template id used when the tool call does not specify templateId."
+    },
+    "templateDir": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Extra template directory. Relative paths resolve against the session workspace. Built-in templates always remain available."
+    },
+    "templateOverlayDir": {
+      "type": "string",
+      "default": ".dsh-report-templates",
+      "description": "Project-local overlay directory. A JSON file whose id matches a built-in template replaces that template after a shallow section merge."
+    },
+    "outputDir": {
+      "type": "string",
+      "default": "reports",
+      "description": "Default output directory, relative to the session workspace unless absolute."
+    },
+    "cacheDir": {
+      "type": "string",
+      "default": ".dsh-report-cache",
+      "description": "Cache root for compiled templates, historical index, plans, section stores, and build manifests."
+    },
+    "pythonPath": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Python executable. Null auto-detects the DSH bundled runtime, then PATH."
+    },
+    "rendererPath": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Override the bundled renderer/report_tool.py path."
+    },
+    "maxOutputChars": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 60000,
+      "default": 12000,
+      "description": "Hard cap on tool result text returned to the model. Full data stays on disk."
+    },
+    "allowOutsideWorkspace": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow an outPath outside the session workspace. Keep false unless the user explicitly asks."
+    },
+    "autoIngest": {
+      "type": "boolean",
+      "default": true,
+      "description": "Build the historical structure index on first status/plan call when cache is absent."
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "includeDocx": { "type": "boolean", "default": true, "description": "Index DOCX structure under the workspace." },
+        "includeSessions": { "type": "boolean", "default": true, "description": "Index report-related session snippets and referenced DOCX paths." },
+        "sessionDirs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Session roots. Empty means <DSH_HOME>/sessions."
+        },
+        "maxDocx": { "type": "integer", "minimum": 1, "maximum": 500, "default": 80 },
+        "maxSessions": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 120 },
+        "maxSessionBytes": { "type": "integer", "minimum": 1048576, "default": 33554432 },
+        "snippetChars": { "type": "integer", "minimum": 80, "maximum": 1000, "default": 280 },
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["实验报告", "实验", "docx", "报告", "需求分析", "实验目的", "实验环境", "实验总结"]
+        }
+      }
+    },
+    "dedupe": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "nearThreshold": { "type": "number", "minimum": 0.5, "maximum": 1, "default": 0.9 },
+        "minChars": { "type": "integer", "minimum": 10, "maximum": 500, "default": 40 },
+        "acrossSections": { "type": "boolean", "default": false, "description": "Also drop near-duplicates across different top-level sections." }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "minWords": { "type": "integer", "minimum": 0, "default": 300 },
+        "minSectionWords": { "type": "integer", "minimum": 0, "default": 20 },
+        "maxDuplicateRatio": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.12 },
+        "maxParagraphChars": { "type": "integer", "minimum": 100, "default": 1200 },
+        "forbidden": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["【待补充", "TODO", "{{", "lorem ipsum"]
+        }
+      }
+    }
+  }
+}

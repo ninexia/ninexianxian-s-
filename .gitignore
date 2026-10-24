@@ -1,0 +1,51 @@
+# DSH 相关
+.dsh-report-cache
+.reports
+*.docx
+.rpt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.htmlcov/
+.poetry/
+.pytest_cache/
+.hypothesis/
+.pylintrc
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# 工作区报告
+reports/
+实验报告-UI组件分析/

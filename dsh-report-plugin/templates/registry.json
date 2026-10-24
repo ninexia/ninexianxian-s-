@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "default": "lab-report",
+  "templates": [
+    "lab-report.json",
+    "lab-report-compact.json",
+    "requirements-analysis.json"
+  ]
+}

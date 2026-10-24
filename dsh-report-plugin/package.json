@@ -1,0 +1,33 @@
+{
+  "name": "@local/dsh-report-docx",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Template-driven DOCX experiment report generator for DeepSeek Harness",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./templates/*.json": "./templates/*.json"
+  },
+  "files": [
+    "index.js",
+    "src/**/*.js",
+    "renderer/*.py",
+    "templates/*.json",
+    "locale/*.json",
+    "icon.svg",
+    "cordis.patch.yml",
+    "config.schema.json",
+    "README.md",
+    "DESIGN.md",
+    "tests/*.mjs",
+    "tests/fixtures/*"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

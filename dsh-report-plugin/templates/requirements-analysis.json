@@ -1,0 +1,165 @@
+{
+  "id": "requirements-analysis",
+  "name": "需求分析/建模实验报告",
+  "description": "适用于软件工程需求提取、需求分析与建模实验：任务分节、可追溯矩阵、一致性检查、AI 使用声明。",
+  "version": 2,
+  "priority": 70,
+  "match": {
+    "keywords": {
+      "需求分析": 10,
+      "需求提取": 10,
+      "需求建模": 9,
+      "用例图": 6,
+      "数据流图": 6,
+      "UML": 5,
+      "可追溯": 6,
+      "一致性": 4,
+      "AI辅助": 3
+    }
+  },
+  "page": {
+    "size": "A4",
+    "orientation": "portrait",
+    "margins": { "top": 1.0, "bottom": 1.0, "left": 1.1, "right": 1.1 },
+    "headerDistance": 0.45,
+    "footerDistance": 0.45
+  },
+  "styles": {
+    "body": { "latin": "Times New Roman", "eastAsia": "宋体", "size": 10.5, "lineSpacing": 1.3, "spaceAfter": 4, "align": "justify" },
+    "h1": { "latin": "Times New Roman", "eastAsia": "黑体", "size": 15, "bold": true, "spaceBefore": 10, "spaceAfter": 6, "keepWithNext": true },
+    "h2": { "latin": "Times New Roman", "eastAsia": "黑体", "size": 13, "bold": true, "spaceBefore": 8, "spaceAfter": 4, "keepWithNext": true },
+    "h3": { "latin": "Times New Roman", "eastAsia": "黑体", "size": 12, "bold": true, "spaceBefore": 6, "spaceAfter": 3, "keepWithNext": true },
+    "caption": { "latin": "Times New Roman", "eastAsia": "楷体", "size": 9, "bold": true, "align": "center" },
+    "table": { "latin": "Times New Roman", "eastAsia": "宋体", "size": 9 },
+    "code": { "latin": "Consolas", "eastAsia": "宋体", "size": 9 }
+  },
+  "cover": {
+    "enabled": true,
+    "layout": "center",
+    "courseSize": 26,
+    "semesterSize": 18,
+    "titleSize": 22,
+    "infoSize": 14,
+    "collegeSize": 14,
+    "spacerLines": 3,
+    "fields": [
+      { "key": "course", "label": "课程名称", "required": true, "default": "软件工程课内实验", "aliases": ["课程"] },
+      { "key": "semester", "label": "学期", "required": false, "default": "2026/2027(1)", "aliases": ["学期"] },
+      { "key": "experiment", "label": "实验名称", "required": true, "aliases": ["实验名称", "实验题目"] },
+      { "key": "name", "label": "学生姓名", "required": true, "aliases": ["姓名"] },
+      { "key": "studentId", "label": "学生学号", "required": true, "aliases": ["学号"] },
+      { "key": "className", "label": "学生班级", "required": true, "aliases": ["班级"] },
+      { "key": "teacher", "label": "任课教师", "required": false, "aliases": ["教师", "任课教师"] },
+      { "key": "date", "label": "提交日期", "required": true, "aliases": ["日期"] },
+      { "key": "college", "label": "学院", "required": false, "default": "计算机科学与技术学院", "aliases": ["学院"] }
+    ]
+  },
+  "header": { "enabled": true, "text": "{{course}} · {{experiment}}" },
+  "footer": { "enabled": true, "pageNumber": true },
+  "toc": { "enabled": true, "minSections": 8, "title": "目　　录" },
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "level": 1,
+      "kind": "list",
+      "required": true,
+      "triggers": ["实验目的", "目的", "目标"],
+      "hint": "对应课程目标，写可验证的能力。",
+      "minWords": 40,
+      "maxWords": 500
+    },
+    {
+      "id": "scope",
+      "title": "二、实验范围",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": true,
+      "triggers": ["实验范围", "范围", "系统边界"],
+      "hint": "说明输入基线、业务范围、边界与不做什么。",
+      "minWords": 50,
+      "maxWords": 900
+    },
+    {
+      "id": "environment",
+      "title": "三、实验环境与工具清单",
+      "level": 1,
+      "kind": "table",
+      "required": true,
+      "triggers": ["实验环境", "工具清单", "环境与工具"],
+      "hint": "建议表格列：类别 | 工具/平台 | 版本 | 用途。",
+      "minWords": 20,
+      "maxWords": 500
+    },
+    {
+      "id": "process",
+      "title": "四、实验过程和结果",
+      "level": 1,
+      "kind": "task-group",
+      "required": true,
+      "triggers": ["实验过程", "任务", "需求清洗", "建模", "需求分析"],
+      "hint": "按任务分节，每节包含输入、方法、产出、检查。",
+      "minWords": 200,
+      "maxWords": 9000,
+      "taskPatterns": [
+        "任务\\s*[一二三四五六七八九十0-9]+",
+        "实验任务\\s*[一二三四五六七八九十0-9]+"
+      ]
+    },
+    {
+      "id": "consistency",
+      "title": "五、一致性校验与可追溯",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": true,
+      "triggers": ["一致性", "可追溯", "追溯矩阵", "平衡", "覆盖"],
+      "hint": "写清检查项、发现的不一致、修正结果；矩阵用 table。",
+      "minWords": 60,
+      "maxWords": 2500
+    },
+    {
+      "id": "ai",
+      "title": "六、AI 使用声明与偏差甄别",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": false,
+      "triggers": ["AI", "大模型", "提示词", "偏差", "使用声明"],
+      "hint": "写工具、用途、关键提示词、AI 输出偏差与人工修正。",
+      "minWords": 50,
+      "maxWords": 1500
+    },
+    {
+      "id": "summary",
+      "title": "七、实验小结",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": true,
+      "triggers": ["实验小结", "总结", "收获", "不足"],
+      "hint": "总结方法、结果、不足与改进，不重复正文。",
+      "minWords": 80,
+      "maxWords": 1200
+    },
+    {
+      "id": "selfcheck",
+      "title": "八、提交规范性自查",
+      "level": 1,
+      "kind": "list",
+      "required": false,
+      "triggers": ["自查", "提交", "规范", "评分标准"],
+      "hint": "逐条列出要求与完成情况，可用表格。",
+      "minWords": 20,
+      "maxWords": 800
+    },
+    {
+      "id": "references",
+      "title": "九、参考资料",
+      "level": 1,
+      "kind": "list",
+      "required": false,
+      "triggers": ["参考资料", "参考文献"],
+      "hint": "只列实际查阅资料。",
+      "minWords": 0,
+      "maxWords": 800
+    }
+  ]
+}

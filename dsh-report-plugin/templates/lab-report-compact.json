@@ -1,0 +1,121 @@
+{
+  "id": "lab-report-compact",
+  "name": "简洁实验报告",
+  "description": "适用于 2—4 页的短实验：目的、环境、内容、过程、结果、总结，不设原理与参考资料。",
+  "version": 1,
+  "priority": 30,
+  "match": {
+    "keywords": {
+      "实验": 3,
+      "简短": 6,
+      "快速": 5,
+      "小实验": 8,
+      "验证": 3
+    }
+  },
+  "page": {
+    "size": "A4",
+    "orientation": "portrait",
+    "margins": { "top": 0.9, "bottom": 0.9, "left": 1.0, "right": 1.0 },
+    "headerDistance": 0.4,
+    "footerDistance": 0.4
+  },
+  "styles": {
+    "body": { "latin": "Times New Roman", "eastAsia": "宋体", "size": 10.5, "lineSpacing": 1.25, "spaceAfter": 3, "align": "justify" },
+    "h1": { "latin": "Times New Roman", "eastAsia": "黑体", "size": 14, "bold": true, "spaceBefore": 8, "spaceAfter": 4, "keepWithNext": true },
+    "h2": { "latin": "Times New Roman", "eastAsia": "黑体", "size": 12, "bold": true, "spaceBefore": 6, "spaceAfter": 3, "keepWithNext": true },
+    "h3": { "latin": "Times New Roman", "eastAsia": "黑体", "size": 11, "bold": true, "spaceBefore": 4, "spaceAfter": 2, "keepWithNext": true },
+    "caption": { "latin": "Times New Roman", "eastAsia": "楷体", "size": 9, "bold": true, "align": "center" },
+    "table": { "latin": "Times New Roman", "eastAsia": "宋体", "size": 9 },
+    "code": { "latin": "Consolas", "eastAsia": "宋体", "size": 8.5 }
+  },
+  "cover": {
+    "enabled": true,
+    "layout": "center",
+    "courseSize": 22,
+    "semesterSize": 14,
+    "titleSize": 20,
+    "infoSize": 12,
+    "collegeSize": 12,
+    "spacerLines": 2,
+    "fields": [
+      { "key": "course", "label": "课程名称", "required": true, "default": "课程实验", "aliases": ["课程"] },
+      { "key": "experiment", "label": "实验名称", "required": true, "aliases": ["实验名称", "实验题目"] },
+      { "key": "name", "label": "姓名", "required": true, "aliases": ["姓名", "学生姓名"] },
+      { "key": "studentId", "label": "学号", "required": true, "aliases": ["学号"] },
+      { "key": "className", "label": "班级", "required": true, "aliases": ["班级"] },
+      { "key": "date", "label": "日期", "required": true, "aliases": ["日期", "实验日期"] }
+    ]
+  },
+  "header": { "enabled": true, "text": "{{course}} · {{experiment}}" },
+  "footer": { "enabled": true, "pageNumber": true },
+  "toc": { "enabled": false, "minSections": 99, "title": "目　　录" },
+  "sections": [
+    {
+      "id": "purpose",
+      "title": "一、实验目的",
+      "level": 1,
+      "kind": "list",
+      "required": true,
+      "triggers": ["实验目的", "目的", "目标"],
+      "hint": "2—4 条可验证目标。",
+      "minWords": 25,
+      "maxWords": 300
+    },
+    {
+      "id": "environment",
+      "title": "二、实验环境",
+      "level": 1,
+      "kind": "list",
+      "required": true,
+      "triggers": ["实验环境", "环境", "工具"],
+      "hint": "系统、语言、IDE、依赖版本。",
+      "minWords": 15,
+      "maxWords": 300
+    },
+    {
+      "id": "content",
+      "title": "三、实验内容",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": true,
+      "triggers": ["实验内容", "实验要求", "任务"],
+      "hint": "转述要求，不扩写。",
+      "minWords": 30,
+      "maxWords": 600
+    },
+    {
+      "id": "process",
+      "title": "四、实验过程",
+      "level": 1,
+      "kind": "task-group",
+      "required": true,
+      "triggers": ["实验过程", "实验步骤", "步骤", "实现"],
+      "hint": "按步骤写操作、命令/代码、观察结果。",
+      "minWords": 80,
+      "maxWords": 3000
+    },
+    {
+      "id": "results",
+      "title": "五、实验结果与分析",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": true,
+      "triggers": ["实验结果", "结果分析", "运行结果", "截图"],
+      "hint": "引用截图/日志，解释结果是否符合预期。",
+      "minWords": 40,
+      "maxWords": 1500
+    },
+    {
+      "id": "summary",
+      "title": "六、实验总结",
+      "level": 1,
+      "kind": "paragraphs",
+      "required": true,
+      "triggers": ["实验总结", "总结", "收获"],
+      "hint": "完成情况、收获、不足。",
+      "minWords": 40,
+      "maxWords": 600
+    }
+  ]
+}
