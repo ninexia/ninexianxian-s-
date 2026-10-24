@@ -88,6 +88,24 @@ function compactBuild(plan, result) {
   }
 }
 
+function blockToMarkdown(block) {
+  const type = block?.type ?? 'paragraph'
+  if (type === 'bullets') return (block.items ?? []).map((item) => `- ${item}`).join('\n')
+  if (type === 'numbered') return (block.items ?? []).map((item, index) => `${index + 1}. ${item}`).join('\n')
+  if (type === 'table') {
+    const headers = block.headers ?? []
+    if (!headers.length) return ''
+    const head = `| ${headers.join(' | ')} |`
+    const sep = `| ${headers.map(() => '---').join(' | ')} |`
+    const rows = (block.rows ?? []).map((row) => `| ${row.join(' | ')} |`).join('\n')
+    return rows ? `${head}\n${sep}\n${rows}` : `${head}\n${sep}`
+  }
+  if (type === 'code') return ['```', block.text ?? '', '```'].join('\n')
+  if (type === 'note') return `> ${block.text ?? ''}`
+  if (type === 'image') return block.caption ? `（图：${block.caption}）` : ''
+  return block.text ?? ''
+}
+
 function buildMarkdownFromSections(sections, plan, template) {
   let markdown = `# ${plan.title}\n\n`
 
@@ -106,7 +124,8 @@ function buildMarkdownFromSections(sections, plan, template) {
   for (const section of sections) {
     markdown += `## ${section.title}\n\n`
     for (const block of section.blocks) {
-      markdown += `${block.text}\n\n`
+      const text = blockToMarkdown(block)
+      if (text) markdown += `${text}\n\n`
     }
   }
 
@@ -128,18 +147,11 @@ export class Engine {
     this.cache = cache
     this.loaded = loaded
     this.workspace = workspace
-    this._python = null
   }
 
-  async python() {
-    if (!this._python) {
-      try {
-        this._python = await pythonInfo(this.config, { cwd: this.workspace })
-      } catch (error) {
-        this._python = { ok: false, error: error.message }
-      }
-    }
-    return this._python
+  renderer() {
+    // v0.2.0: documents are rendered in-process by src/markdown2docx.js.
+    return { ok: true, engine: 'markdown2docx', dependency: 'docx' }
   }
 
   template(id) {
@@ -165,16 +177,16 @@ export class Engine {
     const history = this.config.history.enabled
       ? await this.history({ scope: historyScope, force: refreshHistory }).catch((error) => ({ ok: false, error: error.message }))
       : null
-    const py = await this.python()
+    const renderer = this.renderer()
     return {
       ok: true,
       action: 'status',
-      version: '0.1.0',
+      version: '0.2.0',
       workspace: this.workspace,
       defaultTemplate: this.loaded.defaultId,
       templates: [...this.loaded.templates.values()].map(publicTemplate),
       templateWarnings: this.loaded.warnings,
-      python: py.ok ? { ok: true, version: py.python.split(' ')[0], executable: py.executable } : { ok: false, error: py.error },
+      renderer,
       cache: {
         dir: this.config.cacheDir,
         templateDigest: this.loaded.index.digest,
@@ -308,7 +320,7 @@ export class Engine {
       .map((section) => section.id)
     const outputPath = this.resolveOutputPath(outPath, plan)
     const buildHash = sha256({
-      rendererVersion: '0.1.0',
+      rendererVersion: '0.2.0',
       planId: plan.planId,
       templateDigest: plan.templateDigest,
       sectionHashes: Object.fromEntries(built.sections.map((section) => [section.id, sha256(section.blocks).slice(0, 16)])),
