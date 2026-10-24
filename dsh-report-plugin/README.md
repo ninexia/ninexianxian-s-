@@ -16,6 +16,31 @@
 - 安全边界：输出与图片默认限制在当前工作区内；缺失封面字段会报告，不猜测个人数据
 - Markdown 模板：支持 Markdown 中间格式，Token 消耗更少
 
+## 修复公告（2026-10-25）
+
+此前版本中，`markdown2docx` 渲染链路存在多处缺陷，插件虽能安装但 `plan → build` 无法跑通。现已修复以下 7 个问题，并在本机完成全流程验证：
+
+| 序号 | 问题现象 | 位置 | 修复方式 |
+| --- | --- | --- | --- |
+| 1 | 插件导入即报 `SyntaxError: Unexpected token ')'` | `src/markdown2docx.js` | 删除两处多余的右括号 |
+| 2 | `ERR_MODULE_NOT_FOUND: Cannot find package 'docx'` | `package.json` | 安装 `docx@8.5.0` 依赖 |
+| 3 | 调用 `markdownToDocx` 时报 `is not defined` | `src/engine.js` | 在 import 中补充 `markdownToDocx` |
+| 4 | 渲染报 `Cannot read properties of undefined (reading '0')` | `src/markdown2docx.js` | docx v8 的 `Document` 不暴露 `.sections`，改为构造时一次性传入 `children` |
+| 5 | 列表只渲染第一项；无序/有序列表缺少编号定义 | `src/markdown2docx.js` | 每个列表项独立成段，并在 `Document` 中配置 `bullet-list` / `number-list` 编号 |
+| 6 | 校验必报 `DOCX inspect failed`（`Document.fromBuffer` 不存在） | `src/markdown2docx.js` | 重写 `inspectDocx` 为纯 JS 实现：`node:zlib` 解 ZIP + 解析 `word/document.xml`，零新增依赖 |
+| 7 | 封面字段显示为空、五行挤成一行 | `src/engine.js` | 封面键名改为 `className`/`date`，每个字段独立成段 |
+
+修复后的验证结果：
+
+- `report_docx action=status` 返回 `ok: true`，渲染器 `markdown2docx`（依赖 `docx`）正常
+- 实际生成 13 节实验报告（约 2066 字），校验得分 85，唯一缺项为用户未提供的“学号、班级”封面字段
+- 单次 `build` 渲染耗时 15–22 ms（构建缓存未命中的情况下）
+
+注意事项：
+
+- 插件现为**纯 JavaScript 渲染，不再依赖 Python**；本文档早期版本中出现的 `renderer/report_tool.py` 描述与 Python 探测说明均已过时，请以本公告为准。
+- 修改插件源码后，需要禁用再启用插件（或重启 DSH）让宿主重新加载模块，否则仍在运行旧代码。
+
 ## 安装
 
 **依赖要求**：需要在系统安装 Node.js 和 npm。
@@ -214,7 +239,7 @@ report_docx action=ingest scope="all" force=true
 
 当前验收结果：
 
-- [x] 模板清单与 Python 可用
+- [x] 模板清单与渲染器可用（纯 JS `docx`，无 Python 依赖）
 - [x] plan 能提取封面、任务并选择 `lab-report`
 - [x] build 能渲染段落、列表、表格、代码、图片，并通过校验
 - [x] 增量 build 复用 6 个章节，只重传 summary

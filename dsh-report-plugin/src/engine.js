@@ -6,7 +6,7 @@ import { resolveConfig } from './config.js'
 import { buildPlan, scoreTemplates } from './plan.js'
 import { loadTemplates, publicTemplate } from './templates.js'
 import { buildRenderPayload, buildRenderSections, normalizeSectionsInput } from './content.js'
-import { inspectDocx } from './markdown2docx.js'  // 使用纯 JS 的 inspect
+import { inspectDocx, markdownToDocx } from './markdown2docx.js'  // 使用纯 JS 的 inspect
 import { validateBuild } from './validate.js'
 import { ingestHistory } from './history.js'
 import {
@@ -111,11 +111,13 @@ function buildMarkdownFromSections(sections, plan, template) {
 
   // 封面信息
   if (plan.cover) {
-    markdown += `## 封面\n\n> **课程名称**：${plan.cover.course || ''}\n`
-    markdown += `> **学生姓名**：${plan.cover.name || ''}\n`
-    markdown += `> **学号**：${plan.cover.studentId || ''}\n`
-    markdown += `> **班级**：${plan.cover.class || ''}\n`
-    markdown += `> **提交日期**：${plan.cover.submitDate || ''}\n\n`
+    const cover = plan.cover
+    markdown += '## 封面\n\n'
+    markdown += `> **课程名称**：${cover.course || ''}\n\n`
+    markdown += `> **学生姓名**：${cover.name || ''}\n\n`
+    markdown += `> **学号**：${cover.studentId || ''}\n\n`
+    markdown += `> **班级**：${cover.className || cover.class || ''}\n\n`
+    markdown += `> **提交日期**：${cover.date || cover.submitDate || ''}\n\n`
   }
 
   markdown += `---\n\n`
