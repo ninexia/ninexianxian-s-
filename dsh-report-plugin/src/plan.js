@@ -1,6 +1,6 @@
 import { normalizeKey, normalizeText, shortHash, wordCount } from './util.js'
 
-const FIELD_PATTERNS = {
+export const FIELD_PATTERNS = {
   name: [/(?:学生)?姓名\s*[:：]\s*([^\s，,；;、|]{1,20})/],
   studentId: [/(?:学生)?学号\s*[:：]\s*([A-Za-z0-9_-]{4,30})/],
   className: [/(?:学生)?班级\s*[:：]\s*([^\s，,；;、|]{1,30})/],

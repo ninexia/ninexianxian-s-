@@ -1,12 +1,13 @@
 import { existsSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { Cache } from './cache.js'
 import { resolveConfig } from './config.js'
-import { buildPlan, scoreTemplates } from './plan.js'
-import { loadTemplates, publicTemplate } from './templates.js'
-import { buildRenderPayload, buildRenderSections, normalizeSectionsInput } from './content.js'
-import { inspectDocx, markdownToDocx } from './markdown2docx.js'  // 使用纯 JS 的 inspect
+import { buildPlan, FIELD_PATTERNS, scoreTemplates } from './plan.js'
+import { loadTemplates } from './templates.js'
+import { learnTemplate } from './learn.js'
+import { buildRenderSections, normalizeSectionsInput } from './content.js'
+import { inspectDocx, sectionsToDocx } from './markdown2docx.js'  // 使用纯 JS 的 inspect + 结构直渲染
 import { validateBuild } from './validate.js'
 import { ingestHistory } from './history.js'
 import {
@@ -15,10 +16,12 @@ import {
   ensureDir,
   fileExists,
   isInside,
+  normalizeKey,
   normalizeText,
   safeFilePart,
   sha256,
   shortHash,
+  writeJsonAtomic,
 } from './util.js'
 
 export class ReportError extends Error {
@@ -33,106 +36,103 @@ function projectKeyFor(plan) {
   return `${safeFilePart(plan.title, 'report')}-${shortHash(`${plan.cover.course ?? ''}|${plan.title}`, 8)}`
 }
 
-function compactPlan(plan, template, scores) {
+function courseFromText(text) {
+  for (const pattern of FIELD_PATTERNS.course ?? []) {
+    const match = normalizeText(text).match(pattern)
+    if (match?.[1]) return match[1].trim()
+  }
+  return ''
+}
+
+// 课程名优先于关键词打分：学过这门课就按那门课的模板走
+function templateForCourse(templates, label) {
+  const key = normalizeKey(label)
+  if (!key || key.length < 2) return null
+  let loose = null
+  for (const template of templates.values()) {
+    const aliases = [template.course?.name, ...(template.course?.aliases ?? [])]
+      .filter(Boolean)
+      .map((item) => normalizeKey(item))
+    if (aliases.some((alias) => alias && alias === key)) return template
+    if (!loose && aliases.some((alias) => alias.length >= 2 && (key.includes(alias) || alias.includes(key)))) loose = template
+  }
+  return loose
+}
+
+function coverPayload(template, plan) {
+  const cover = template.cover ?? {}
+  if (cover.enabled === false) return { enabled: false }
   return {
-    planId: plan.planId,
-    template: { id: template.id, name: template.name, version: plan.templateVersion },
-    title: plan.title,
-    cover: plan.cover,
-    coverSources: plan.coverSources,
-    missingCover: plan.missingCover,
-    includeToc: plan.includeToc,
-    stats: plan.stats,
-    warnings: plan.warnings,
-    sections: plan.sections.map((section) => ({
-      id: section.id,
-      title: section.title,
-      level: section.level,
-      kind: section.kind,
-      required: section.required,
-      minWords: section.minWords,
-      hint: section.hint,
-      parentId: section.parentId,
+    enabled: true,
+    layout: cover.layout ?? 'center',
+    courseSize: cover.courseSize,
+    semesterSize: cover.semesterSize,
+    titleSize: cover.titleSize,
+    infoSize: cover.infoSize,
+    spacerLines: cover.spacerLines,
+    fields: (cover.fields ?? []).map((field) => ({
+      key: field.key,
+      label: field.label,
+      value: plan.cover[field.key] ?? '',
     })),
-    candidates: scores?.slice(0, 4).map((item) => ({ id: item.id, score: item.score, hits: item.hits })),
   }
 }
 
-function compactBuild(plan, result) {
-  return {
-    ok: result.validation.ok,
-    action: 'build',
+// 复用信息只给写正文需要的：id/标题/字数预算/一句话提示
+function compactPlan(plan, template, detail = {}) {
+  const payload = {
+    ok: true,
+    action: 'plan',
     planId: plan.planId,
-    path: result.path,
-    bytes: result.bytes,
-    template: plan.templateId,
+    template: template.id,
     title: plan.title,
+    cover: plan.cover,
+    sections: plan.sections.map((section) => {
+      const row = { id: section.id, title: section.title, level: section.level, minWords: section.minWords }
+      if (section.hint) row.hint = section.hint
+      if (!section.required) row.optional = true
+      return row
+    }),
+  }
+  if (plan.missingCover.length) payload.missingCover = plan.missingCover.map((field) => field.key)
+  if (plan.warnings.length) payload.warnings = plan.warnings
+  if (detail.via) payload.via = detail.via
+  if (detail.altTemplate) payload.altTemplate = detail.altTemplate
+  payload.next = plan.missingCover.length
+    ? `Fill cover fields: ${plan.missingCover.map((field) => field.key).join(', ')}; then call action=build with planId and a sections map.`
+    : 'Write only the sections you can support from evidence, then call action=build with planId and a sections map keyed by these ids.'
+  return payload
+}
+
+function compactBuild(plan, result) {
+  const validation = result.validation ?? {}
+  const all = [...new Set([...(result.warnings ?? []), ...(validation.warnings ?? [])])]
+  // 字数不足是最常见也最不紧急的提示，排到后面，免得挤掉输入错误
+  const ordered = [...all.filter((warning) => !/below budget|低于/.test(warning)), ...all.filter((warning) => /below budget|低于/.test(warning))]
+  const warnings = ordered.slice(0, 6)
+  const errors = [...new Set(validation.errors ?? [])].slice(0, 4)
+  return {
+    ok: validation.ok === true,
+    action: 'build',
+    path: result.path,
+    planId: plan.planId,
+    bytes: result.bytes,
     sections: {
       planned: plan.sections.length,
       rendered: result.renderedSections,
       reused: result.reused.length,
-      missing: result.missingSections.length,
       placeholders: result.placeholders,
     },
-    validation: result.validation,
-    warnings: (result.warnings ?? []).slice(0, 8),
-    cache: {
-      hit: result.cacheHit === true,
-      reusedSections: result.reused,
-      dedupedBlocks: result.dedupedBlocks,
-    },
-    elapsedMs: result.elapsedMs,
-    next: result.validation.ok
-      ? 'Review the DOCX visually if layout matters; otherwise deliver this path.'
-      : `Fix validation errors, then call action=build with planId=${plan.planId} and only changed sections.`,
+    missing: result.missingSections,
+    errors,
+    warnings,
+    cacheHit: result.cacheHit === true,
+    next: validation.ok
+      ? 'Deliver this path. Rebuild with the same planId and only the sections you changed if anything looks off.'
+      : `Fix errors and call action=build again with planId=${plan.planId} and only the changed sections.`,
   }
 }
 
-function blockToMarkdown(block) {
-  const type = block?.type ?? 'paragraph'
-  if (type === 'bullets') return (block.items ?? []).map((item) => `- ${item}`).join('\n')
-  if (type === 'numbered') return (block.items ?? []).map((item, index) => `${index + 1}. ${item}`).join('\n')
-  if (type === 'table') {
-    const headers = block.headers ?? []
-    if (!headers.length) return ''
-    const head = `| ${headers.join(' | ')} |`
-    const sep = `| ${headers.map(() => '---').join(' | ')} |`
-    const rows = (block.rows ?? []).map((row) => `| ${row.join(' | ')} |`).join('\n')
-    return rows ? `${head}\n${sep}\n${rows}` : `${head}\n${sep}`
-  }
-  if (type === 'code') return ['```', block.text ?? '', '```'].join('\n')
-  if (type === 'note') return `> ${block.text ?? ''}`
-  if (type === 'image') return block.caption ? `（图：${block.caption}）` : ''
-  return block.text ?? ''
-}
-
-function buildMarkdownFromSections(sections, plan, template) {
-  let markdown = `# ${plan.title}\n\n`
-
-  // 封面信息
-  if (plan.cover) {
-    const cover = plan.cover
-    markdown += '## 封面\n\n'
-    markdown += `> **课程名称**：${cover.course || ''}\n\n`
-    markdown += `> **学生姓名**：${cover.name || ''}\n\n`
-    markdown += `> **学号**：${cover.studentId || ''}\n\n`
-    markdown += `> **班级**：${cover.className || cover.class || ''}\n\n`
-    markdown += `> **提交日期**：${cover.date || cover.submitDate || ''}\n\n`
-  }
-
-  markdown += `---\n\n`
-
-  // 遍历章节
-  for (const section of sections) {
-    markdown += `## ${section.title}\n\n`
-    for (const block of section.blocks) {
-      const text = blockToMarkdown(block)
-      if (text) markdown += `${text}\n\n`
-    }
-  }
-
-  return markdown
-}
 
 export async function createEngine({ config: rawConfig, workspace, packageDir }) {
   const { config, problems } = resolveConfig(rawConfig, { workspace, packageDir })
@@ -179,44 +179,47 @@ export class Engine {
     const history = this.config.history.enabled
       ? await this.history({ scope: historyScope, force: refreshHistory }).catch((error) => ({ ok: false, error: error.message }))
       : null
-    const renderer = this.renderer()
-    return {
+    const payload = {
       ok: true,
       action: 'status',
-      version: '0.2.0',
-      workspace: this.workspace,
       defaultTemplate: this.loaded.defaultId,
-      templates: [...this.loaded.templates.values()].map(publicTemplate),
-      templateWarnings: this.loaded.warnings,
-      renderer,
+      templates: [...this.loaded.templates.values()].map((template) => {
+        const row = { id: template.id, name: template.name, sections: template.sections.length }
+        if (template.course?.name) row.course = template.course.name
+        if (template.source?.docx) row.from = template.source.docx
+        return row
+      }),
       cache: {
-        dir: this.config.cacheDir,
-        templateDigest: this.loaded.index.digest,
         history: history?.ok
-          ? { docs: history.docx.unique, sessions: history.sessions.relevant, cacheHit: history.cacheHit, age: history.generatedAt }
+          ? { docs: history.docx.unique, sessions: history.sessions.relevant }
           : { error: history?.error ?? 'disabled' },
       },
-      config: {
-        outputDir: this.config.outputDir,
-        maxOutputChars: this.config.maxOutputChars,
-        autoIngest: this.config.autoIngest,
-        dedupe: this.config.dedupe,
-      },
-      next: 'Call action=plan with the full experiment requirements. Then call action=build with a sections map keyed by section id.',
+      next: 'Call action=plan with the requirements. Pass course to force a course template, or action=template with a DOCX path to learn one.',
     }
+    if (this.loaded.warnings.length) payload.templateWarnings = this.loaded.warnings.slice(0, 4)
+    return payload
   }
 
-  async plan({ requirements, templateId, cover = {}, options = {} } = {}) {
+  async plan({ requirements, templateId, course, cover = {}, options = {} } = {}) {
     const text = normalizeText(requirements)
     if (!text) throw new ReportError('REQUIREMENTS_REQUIRED', 'requirements is required for action=plan')
     const scores = scoreTemplates(this.loaded.templates, text)
-    const requested = templateId || this.loaded.defaultId
+    const courseLabel = String(course ?? '').trim() || courseFromText(text)
     let template
+    let via = 'default'
     if (templateId) {
       template = this.template(templateId)
+      via = 'templateId'
     } else {
-      const best = scores[0]
-      template = this.loaded.templates.get(best?.score > 0 ? best.id : requested) ?? this.template(requested)
+      const matched = templateForCourse(this.loaded.templates, courseLabel)
+      if (matched) {
+        template = matched
+        via = 'course'
+      } else {
+        const best = scores[0]
+        template = this.loaded.templates.get(best?.score > 0 ? best.id : this.loaded.defaultId) ?? this.template(this.loaded.defaultId)
+        via = best?.score > 0 ? 'keywords' : 'default'
+      }
     }
     if (options.templateOverrides) {
       template = deepMerge(template, options.templateOverrides)
@@ -249,18 +252,11 @@ export class Engine {
         updatedAt: new Date().toISOString(),
       })
     }
-    const result = compactPlan(plan, template, scores)
-    result.cache = {
-      templateDigest: this.loaded.index.digest,
-      historyDocs: history?.docx?.unique ?? 0,
-      historySessions: history?.sessions?.relevant ?? 0,
-      historyHit: history?.cacheHit === true,
-      priorSections: Object.keys(previous?.sections ?? {}).length,
-    }
-    result.next = plan.missingCover.length
-      ? `Provide cover fields: ${plan.missingCover.map((field) => field.key).join(', ')}; then write sections and call action=build.`
-      : 'Write only the sections you can support from evidence, then call action=build with planId and a sections map. Missing required sections become visible placeholders.'
-    return result
+    const runnerUp = scores.find((item) => item.id !== template.id && item.score > 0)
+    const altTemplate = via !== 'course' && runnerUp && scores[0]?.score > 0 && runnerUp.score >= scores[0].score * 0.85
+      ? runnerUp.id
+      : undefined
+    return compactPlan(plan, template, { via, altTemplate })
   }
 
   async loadPlan(planId) {
@@ -338,13 +334,18 @@ export class Engine {
       })
     }
 
-    // 生成 Markdown 内容（从 sections 构建）
-    const markdown = buildMarkdownFromSections(built.sections, plan, template)
-    
-    // 直接调用纯 JS 渲染器生成 docx
+    // 结构化正文直接渲染，封面/字体/表格/图片都走模板
     let rendered
     try {
-      rendered = await markdownToDocx(markdown, outputPath)
+      rendered = await sectionsToDocx(built.sections, outputPath, {
+        cover: coverPayload(template, plan),
+        styles: template.styles ?? {},
+        page: template.page ?? {},
+        header: template.header ?? {},
+        footer: template.footer ?? {},
+        toc: { enabled: plan.includeToc === true, title: template.toc?.title ?? '目　　录' },
+        title: plan.title,
+      })
     } catch (error) {
       throw new ReportError('RENDER_FAILED', error.message)
     }
@@ -435,17 +436,44 @@ export class Engine {
       ok: validation.ok,
       action: 'validate',
       path: target,
-      template: planId ? (await this.loadPlan(planId)).templateId : undefined,
-      validation,
+      errors: (validation.errors ?? []).slice(0, 6),
+      warnings: (validation.warnings ?? []).slice(0, 6),
       structure: {
         paragraphs: inspect.paragraphs,
         tables: inspect.tables,
         images: inspect.images,
-        headings: inspect.headings.length,
         words: inspect.words,
-        duplicateRatio: inspect.duplicateRatio,
+        duplicateRatio: Number((inspect.duplicateRatio ?? 0).toFixed(3)),
       },
       next: validation.ok ? 'Validation passed; deliver the DOCX.' : 'Fix errors and rebuild only the affected sections.',
+    }
+  }
+
+  // 把一门课以前的 DOCX 学成模板，之后同课程的报告直接复用它的章节与封面
+  async learn({ path, course, name, templateId, force = false } = {}) {
+    if (!path) throw new ReportError('PATH_REQUIRED', 'path is required for action=template')
+    const target = isAbsolute(path) ? resolve(path) : resolve(this.workspace, path)
+    if (!fileExists(target)) throw new ReportError('FILE_NOT_FOUND', `DOCX not found: ${target}`)
+    const learned = await learnTemplate({
+      docxPath: target,
+      workspace: this.workspace,
+      overlayDir: this.config.templateOverlayDir,
+      course,
+      name,
+      templateId,
+      force,
+    })
+    const saved = join(this.config.templateOverlayDir, `${safeFilePart(learned.id)}.json`)
+    await writeJsonAtomic(saved, learned)
+    return {
+      ok: true,
+      action: 'template',
+      templateId: learned.id,
+      course: learned.course?.name ?? null,
+      sections: learned.sections.length,
+      coverFields: learned.cover.fields.map((field) => field.key),
+      saved: relative(this.workspace, saved).replace(/\\/g, '/'),
+      next: `Template ${learned.id} is ready. Call action=plan with the requirements (course="${learned.course?.name ?? ''}") to use it.`,
     }
   }
 

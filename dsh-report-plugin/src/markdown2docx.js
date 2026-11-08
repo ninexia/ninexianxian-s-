@@ -1,8 +1,10 @@
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell,
-  WidthType, AlignmentType, LevelFormat
+  WidthType, AlignmentType, LevelFormat, PageBreak, ImageRun, TableOfContents,
+  Header, Footer, PageNumber, BorderStyle, convertInchesToTwip
 } from 'docx';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 
 // 默认字体配置
@@ -112,8 +114,152 @@ function parseMarkdown(markdown) {
 }
 
 // 构建 Docx（docx v8：children 必须在构造时一次性传入）
-async function buildDocxFromBlocks(blocks) {
+function fontOf(style, fallback = DEFAULT_FONT) {
+  return {
+    ascii: style?.latin ?? fallback.latin,
+    hAnsi: style?.latin ?? fallback.latin,
+    eastAsia: style?.eastAsia ?? fallback.eastAsia
+  };
+}
+
+function documentStyles(styles = {}) {
+  const body = styles.body ?? {};
+  const heading = (style, fallbackSize) => ({
+    run: {
+      font: fontOf(style, { latin: 'Times New Roman', eastAsia: '黑体' }),
+      size: Math.round(Number(style?.size ?? fallbackSize) * 2),
+      bold: style?.bold !== false
+    },
+    paragraph: {
+      spacing: {
+        before: Math.round(Number(style?.spaceBefore ?? 0) * 20),
+        after: Math.round(Number(style?.spaceAfter ?? 0) * 20)
+      }
+    }
+  });
+  return {
+    default: {
+      document: {
+        run: { font: fontOf(body), size: Math.round(Number(body.size ?? 10.5) * 2) },
+        paragraph: {
+          spacing: {
+            line: Math.round(Number(body.lineSpacing ?? 1.2) * 240),
+            after: Math.round(Number(body.spaceAfter ?? 4) * 20)
+          }
+        }
+      },
+      heading1: heading(styles.h1, 15),
+      heading2: heading(styles.h2, 13),
+      heading3: heading(styles.h3, 12)
+    }
+  };
+}
+
+const COVER_ORDER = ['course', 'semester', 'experiment', 'name', 'studentId', 'className', 'major', 'college', 'teacher', 'date'];
+
+// 封面页：模板只负责字段与字号，排版由这里统一
+function coverParagraphs(cover = {}) {
+  const paragraphs = [];
+  const spacerLines = Math.max(0, Math.min(8, Number(cover.spacerLines ?? 2)));
+  for (let index = 0; index < spacerLines; index += 1) paragraphs.push(new Paragraph({ children: [] }));
+
+  const fields = Array.isArray(cover.fields) ? cover.fields : [];
+  const byKey = new Map(fields.map((field) => [field.key, field]));
+  const extraKeys = [...byKey.keys()].filter((key) => !COVER_ORDER.includes(key));
+  for (const key of [...COVER_ORDER.filter((item) => byKey.has(item)), ...extraKeys]) {
+    const field = byKey.get(key);
+    const value = String(field?.value ?? '').trim();
+    if (!value) continue;
+    const isHeadline = key === 'course' || key === 'experiment';
+    const size = key === 'course' ? Number(cover.courseSize ?? 26)
+      : key === 'experiment' ? Number(cover.titleSize ?? 22)
+        : key === 'semester' ? Number(cover.semesterSize ?? 18)
+          : Number(cover.infoSize ?? 14);
+    paragraphs.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: isHeadline ? 120 : 40, after: isHeadline ? 240 : 90 },
+      children: [new TextRun({
+        text: isHeadline ? value : `${field.label ?? key}：${value}`,
+        bold: isHeadline,
+        size: Math.round(size * 2),
+        font: { ascii: 'Times New Roman', hAnsi: 'Times New Roman', eastAsia: '黑体' }
+      })]
+    }));
+  }
+  paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
+  return paragraphs;
+}
+
+// 页眉/页脚/目录：文本里的 {{key}} 用封面字段替换
+function fillPlaceholders(text, values) {
+  return String(text ?? '').replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key) => String(values?.[key] ?? '')).replace(/\s{2,}/g, ' ').trim();
+}
+
+function coverValues(cover = {}, title = '') {
+  const values = { title };
+  for (const field of cover.fields ?? []) {
+    const value = String(field.value ?? '').trim();
+    if (value) values[field.key] = value;
+  }
+  values.experiment = values.experiment || title;
+  return values;
+}
+
+function headerChildren(header, values, bodyStyle) {
+  if (header?.enabled === false) return [];
+  const text = fillPlaceholders(header?.text ?? '', values);
+  if (!text) return [];
+  return [new Paragraph({
+    alignment: AlignmentType.RIGHT,
+    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'BFBFBF', space: 4 } },
+    children: [new TextRun({
+      text,
+      size: Math.round(Number(header?.size ?? 9) * 2),
+      color: '595959',
+      font: fontOf(bodyStyle)
+    })]
+  })];
+}
+
+function footerChildren(footer, bodyStyle) {
+  if (footer?.enabled === false || footer?.pageNumber === false) return [];
+  const size = Math.round(Number(footer?.size ?? 9) * 2);
+  const font = fontOf(bodyStyle);
+  return [new Paragraph({
+    alignment: AlignmentType.CENTER,
+    children: [
+      new TextRun({ text: '第 ', size, color: '595959', font }),
+      new TextRun({ children: [PageNumber.CURRENT], size, color: '595959', font }),
+      new TextRun({ text: ' 页 / 共 ', size, color: '595959', font }),
+      new TextRun({ children: [PageNumber.TOTAL_PAGES], size, color: '595959', font }),
+      new TextRun({ text: ' 页', size, color: '595959', font })
+    ]
+  })];
+}
+
+function tocChildren(toc) {
+  return [
+    new TableOfContents(toc?.title ?? '目　　录', {
+      hyperlink: true,
+      headingStyleRange: '1-3',
+      pageNumbersEntryLevelsRange: '1-3'
+    }),
+    new Paragraph({ children: [new PageBreak()] })
+  ];
+}
+
+async function buildDocxFromBlocks(blocks, options = {}) {
   const children = [];
+  const styles = options.styles ?? {};
+  const pageConfig = options.page ?? {};
+  const margins = pageConfig.margins ?? {};
+  const landscape = pageConfig.orientation === 'landscape';
+  const bodyStyle = styles.body ?? {};
+  const bodyFirstLine = Math.round(Number(bodyStyle.firstLineIndent ?? 0) * Number(bodyStyle.size ?? 10.5) * 20);
+  const bodyAlign = bodyStyle.align === 'justify' ? AlignmentType.JUSTIFIED : undefined;
+  const headerValues = coverValues(options.cover ?? {}, options.title ?? '');
+  const header = headerChildren(options.header, headerValues, bodyStyle);
+  const footer = footerChildren(options.footer, bodyStyle);
 
   const listItems = (items, reference) => (items ?? []).map((item) =>
     new Paragraph({
@@ -140,7 +286,8 @@ async function buildDocxFromBlocks(blocks) {
         child = new Paragraph({
           children: [new TextRun(block.text)],
           spacing: { after: 80 },
-          alignment: AlignmentType.JUSTIFIED
+          alignment: bodyAlign ?? AlignmentType.JUSTIFIED,
+          indent: bodyFirstLine > 0 ? { firstLine: bodyFirstLine } : undefined
         });
         break;
 
@@ -184,6 +331,47 @@ async function buildDocxFromBlocks(blocks) {
         });
         break;
 
+      case 'note':
+        child = new Paragraph({
+          children: [new TextRun({ text: String(block.text ?? ''), italics: true })],
+          spacing: { after: 80 }
+        });
+        break;
+
+      case 'pagebreak':
+        child = new Paragraph({ children: [new PageBreak()] });
+        break;
+
+      case 'image': {
+        if (!block.path || block.missing === true) continue;
+        let buffer;
+        try {
+          buffer = await readFile(block.path);
+        } catch {
+          continue;
+        }
+        const meta = imageFormat(buffer) ?? { width: 800, height: 600 };
+        const widthPx = Math.max(16, Math.round(Number(block.width ?? 5.6) * 37.795));
+        const heightPx = Math.max(16, Math.round((meta.height / meta.width) * widthPx));
+        const run = new ImageRun({ data: buffer, transformation: { width: widthPx, height: heightPx } });
+        if (meta.ext && meta.ext !== 'png') {
+          try {
+            run.imageData.fileName = `${String(run.key).replace(/\.png$/, '')}.${meta.ext}`;
+          } catch {
+            // 保留默认 .png 命名，Word 仍能按内容识别
+          }
+        }
+        children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120, after: 40 }, children: [run] }));
+        if (block.caption) {
+          children.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 160 },
+            children: [new TextRun({ text: `图 ${block.caption}`, size: 20, font: fontOf(styles.body) })]
+          }));
+        }
+        continue;
+      }
+
       default:
         child = new Paragraph({
           children: [new TextRun(String(block.text ?? ''))],
@@ -218,53 +406,92 @@ async function buildDocxFromBlocks(blocks) {
         }
       ]
     },
-    styles: {
-      default: {
-        document: {
-          run: {
-            font: {
-              ascii: DEFAULT_FONT.latin,
-              hAnsi: DEFAULT_FONT.latin,
-              eastAsia: DEFAULT_FONT.eastAsia
-            },
-            size: DEFAULT_FONT.size
-          },
-          paragraph: { spacing: { line: 360, after: 60 } }
-        },
-        heading1: {
-          run: { font: { ascii: '黑体', hAnsi: '黑体', eastAsia: '黑体' }, size: 32, bold: true },
-          paragraph: { spacing: { before: 240, after: 120 } }
-        },
-        heading2: {
-          run: { font: { ascii: '黑体', hAnsi: '黑体', eastAsia: '黑体' }, size: 28, bold: true },
-          paragraph: { spacing: { before: 200, after: 100 } }
-        }
-      }
-    },
+    styles: documentStyles(styles),
+    features: { updateFields: true },
     sections: [{
+      ...(header.length ? { headers: { default: new Header({ children: header }), first: new Header({ children: [] }) } } : {}),
+      ...(footer.length ? { footers: { default: new Footer({ children: footer }), first: new Footer({ children: [] }) } } : {}),
       properties: {
+        titlePage: header.length > 0 || footer.length > 0,
         page: {
-          size: 'A4',
-          orientation: 'portrait',
-          margins: { top: 1, bottom: 1, left: 1.1, right: 1.1 }
+          size: landscape ? { width: 16838, height: 11906 } : { width: 11906, height: 16838 },
+          orientation: landscape ? 'landscape' : 'portrait',
+          margin: {
+            top: convertInchesToTwip(Number(margins.top ?? 1)),
+            bottom: convertInchesToTwip(Number(margins.bottom ?? 1)),
+            left: convertInchesToTwip(Number(margins.left ?? 1.1)),
+            right: convertInchesToTwip(Number(margins.right ?? 1.1)),
+            header: convertInchesToTwip(Number(pageConfig.headerDistance ?? 0.45)),
+            footer: convertInchesToTwip(Number(pageConfig.footerDistance ?? 0.45))
+          }
         }
       },
-      children
+      children: [
+        ...(options.cover?.enabled === false
+          || !(options.cover?.fields ?? []).some((field) => String(field.value ?? '').trim())
+          ? []
+          : coverParagraphs(options.cover)),
+        ...(options.toc?.enabled ? tocChildren(options.toc) : []),
+        ...children
+      ]
     }]
   });
 }
 
 // 输出 Docx 文件
-export async function markdownToDocx(markdown, outputPath) {
+async function writeDocxFile(blocks, outputPath, options = {}) {
   try {
-    const blocks = parseMarkdown(markdown);
-    const doc = await buildDocxFromBlocks(blocks);
+    const doc = await buildDocxFromBlocks(blocks, options);
     const buffer = await Packer.toBuffer(doc);
+    await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, buffer);
     return { ok: true, bytes: buffer.length };
   } catch (error) {
     return { ok: false, error: (error && error.stack) || (error && error.message) || String(error) };
   }
+}
+
+export async function markdownToDocx(markdown, outputPath, options = {}) {
+  return writeDocxFile(parseMarkdown(markdown), outputPath, options);
+}
+
+// 结构化正文直接成文，避开 Markdown 往返：图片、分页、表格都不丢信息
+export async function sectionsToDocx(sections, outputPath, options = {}) {
+  const blocks = [];
+  for (const section of sections ?? []) {
+    if (section.title) {
+      blocks.push({ type: 'heading', level: Math.max(1, Math.min(3, Number(section.level) || 1)), text: section.title });
+    }
+    for (const block of section.blocks ?? []) blocks.push(block);
+  }
+  return writeDocxFile(blocks, outputPath, options);
+}
+
+// PNG / JPEG / GIF / BMP 头解析，只为算宽高比
+function imageFormat(buffer) {
+  if (buffer.length > 24 && buffer.readUInt32BE(0) === 0x89504e47) {
+    return { ext: 'png', width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+  if (buffer.length > 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < buffer.length) {
+      if (buffer[offset] !== 0xff) { offset += 1; continue; }
+      const marker = buffer[offset + 1];
+      const length = buffer.readUInt16BE(offset + 2);
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { ext: 'jpg', height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
+      }
+      offset += 2 + length;
+    }
+    return { ext: 'jpg', width: 800, height: 600 };
+  }
+  if (buffer.length > 10 && buffer.toString('utf8', 0, 3) === 'GIF') {
+    return { ext: 'gif', width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+  }
+  if (buffer.length > 26 && buffer[0] === 0x42 && buffer[1] === 0x4d) {
+    return { ext: 'bmp', width: buffer.readInt32LE(18), height: buffer.readInt32LE(22) };
+  }
+  return null;
 }
 
 /* ---------------- DOCX 解析（纯 JS，无外部依赖） ---------------- */
@@ -386,6 +613,7 @@ export async function inspectDocx(path) {
       ok: true,
       bytes: buffer.length,
       paragraphs: paragraphs.length,
+      blocks: paragraphs,
       headings,
       tables,
       images,

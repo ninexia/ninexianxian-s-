@@ -8,7 +8,7 @@ export const inject = ['tools']
 
 const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-const ACTION_VALUES = ['status', 'plan', 'build', 'validate', 'ingest']
+const ACTION_VALUES = ['status', 'plan', 'build', 'validate', 'template']
 
 const PARAMETERS = {
   type: 'object',
@@ -18,61 +18,52 @@ const PARAMETERS = {
     action: {
       type: 'string',
       enum: ACTION_VALUES,
-      description: 'status=capabilities/cache; plan=parse requirements; build=render DOCX; validate=inspect DOCX; ingest=reindex history.',
+      description: 'status=list templates; plan=requirements -> section ids; build=render DOCX; validate=inspect a DOCX; template=learn a course template from a past DOCX.',
     },
     requirements: {
       type: 'string',
-      description: 'Full current experiment requirements. Required for plan; optional for build only when planId is supplied.',
-    },
-    templateId: {
-      type: 'string',
-      description: 'Template id from status. Omit to auto-match the requirements.',
+      description: 'Full experiment requirements, verbatim from the user. Required for plan.',
     },
     planId: {
       type: 'string',
-      description: 'Plan id returned by action=plan. Reuse it for incremental builds.',
+      description: 'From action=plan. Build reuses that plan and its cached section content.',
     },
     sections: {
       type: 'object',
       additionalProperties: true,
-      description: 'Map section id -> content. Content may be a string, array, or object with paragraphs/bullets/numbered/tables/images/code/blocks.',
+      description: 'Map section id -> content: a string, an array, or {paragraphs, bullets, numbered, tables, images, code, blocks}.',
     },
     cover: {
       type: 'object',
       additionalProperties: { type: 'string' },
-      description: 'Cover field overrides keyed by field key or label (course, experiment, name, studentId, className, teacher, date, college, major, semester).',
+      description: 'Cover values by field key: course, experiment, name, studentId, className, major, college, teacher, date, semester.',
+    },
+    course: {
+      type: 'string',
+      description: 'Course name, e.g. "人机交互" or "Java EE". plan prefers the learned template for that course; template records it.',
+    },
+    templateId: {
+      type: 'string',
+      description: 'Force one template instead of matching by course or keywords.',
     },
     outPath: {
       type: 'string',
-      description: 'Output .docx path relative to the workspace. Defaults to reports/<experiment>_<yyyymmdd>.docx.',
+      description: 'Output .docx path inside the workspace. Defaults to reports/<title>_<yyyymmdd>.docx.',
+    },
+    path: {
+      type: 'string',
+      description: 'DOCX path: the source report for action=template, the file to inspect for action=validate.',
     },
     options: {
       type: 'object',
       additionalProperties: false,
       properties: {
         includeToc: { type: 'boolean' },
-        includeSections: { type: 'array', items: { type: 'string' } },
-        excludeSections: { type: 'array', items: { type: 'string' } },
-        fullTemplate: { type: 'boolean', description: 'Include optional sections even without trigger keywords.' },
-        reuse: { type: 'boolean', description: 'Reuse prior section content even when the requirements digest changed.' },
-        force: { type: 'boolean', description: 'Re-render even when the build cache is valid.' },
-        keepSectionTogether: { type: 'boolean' },
-        templateOverrides: { type: 'object', additionalProperties: true },
+        fullTemplate: { type: 'boolean', description: 'Include optional sections even when no keyword matches.' },
+        reuse: { type: 'boolean', description: 'Default true: keep sections already built for this project.' },
       },
     },
-    scope: {
-      type: 'string',
-      enum: ['all', 'workspace', 'sessions'],
-      description: 'History scan scope for ingest/status.',
-    },
-    force: {
-      type: 'boolean',
-      description: 'Force a history reindex (ingest) or a rebuild (build).',
-    },
-    path: {
-      type: 'string',
-      description: 'Path to the DOCX file to validate. Required for action=validate.',
-    },
+    force: { type: 'boolean', description: 'Ignore caches: rescan history (status), re-render (build), relearn (template).' },
   },
 }
 
@@ -81,19 +72,16 @@ const OUTPUT_SCHEMA = {
   additionalProperties: true,
   properties: {
     ok: { type: 'boolean' },
-    action: { type: 'string' },
-    planId: { type: 'string' },
     path: { type: 'string' },
     next: { type: 'string' },
   },
 }
 
 const PROMPT = `## Report DOCX
-When the user asks for an experiment/report DOCX, call report_docx action=plan with the full requirements. Do not paste or restate the template. Then write only the sections supported by evidence and call action=build with planId plus a sections map keyed by section id; reuse returned section ids for later edits. Never invent screenshots, measurements, logs, or experimental results. If required cover fields are missing, ask once or leave them for the user; do not guess personal data. Deliver the returned .docx path and mention validation warnings only when they affect the deliverable.`
+Report work, one call per step: plan(requirements) → build(planId, sections) → validate(path). action=template learns a course template from a past DOCX so later reports of that course reuse its sections and cover; when the user mentions a course you already have a template for, pass course to plan. Content must come from evidence you actually have; never invent screenshots, measurements, logs, or results.`
 
 function textContent(value, maxChars) {
-  const text = JSON.stringify(value, null, 2)
-  return [{ type: 'text', text: truncate(text, maxChars) }]
+  return [{ type: 'text', text: truncate(JSON.stringify(value), maxChars) }]
 }
 
 function workspaceFor(exec, workingDirectory) {
@@ -109,11 +97,12 @@ function workspaceFor(exec, workingDirectory) {
 async function dispatch(engine, args) {
   switch (args.action) {
     case 'status':
-      return engine.status({ refreshHistory: args.force === true, historyScope: args.scope ?? 'all' })
+      return engine.status({ refreshHistory: args.force === true })
     case 'plan':
       return engine.plan({
         requirements: args.requirements,
         templateId: args.templateId,
+        course: args.course,
         cover: args.cover,
         options: args.options,
       })
@@ -122,18 +111,22 @@ async function dispatch(engine, args) {
         planId: args.planId,
         requirements: args.requirements,
         templateId: args.templateId,
+        course: args.course,
         cover: args.cover,
         sections: args.sections,
         outPath: args.outPath,
-        options: { ...(args.options ?? {}), force: args.options?.force === true || args.force === true },
+        options: { ...(args.options ?? {}), force: args.force === true },
       })
     case 'validate':
-      if (!args.path) {
-        throw new ReportError('PATH_REQUIRED', 'path is required for action=validate')
-      }
+      if (!args.path) throw new ReportError('PATH_REQUIRED', 'path is required for action=validate')
       return engine.validate({ path: args.path, planId: args.planId })
-    case 'ingest':
-      return engine.ingest({ scope: args.scope ?? 'all', force: args.force !== false })
+    case 'template':
+      return engine.learn({
+        path: args.path,
+        course: args.course,
+        templateId: args.templateId,
+        force: args.force === true,
+      })
     default:
       throw new ReportError('UNKNOWN_ACTION', `unknown action: ${args.action}`)
   }
@@ -146,11 +139,11 @@ export function apply(ctx, config = {}) {
 
   ctx.effect(() => tools.register({
     name: 'report_docx',
-    description: 'Generate, incrementally update, or validate a DOCX experiment report. Use action=plan first with the full requirements, then action=build with a sections map keyed by plan section ids. Reuses historical templates, cached section content, dedupe, and validation. Does not invent experimental evidence.',
+    description: 'Generate, extend, or validate an experiment-report DOCX that follows a course template. Learns a template from a past DOCX, plans sections from the requirements, builds with per-section content, then validates. Never invents experimental evidence.',
     parameters: PARAMETERS,
     output: {
       schema: OUTPUT_SCHEMA,
-      render: (_args, value) => textContent(value, config.maxOutputChars ?? 12000),
+      render: (_args, value) => textContent(value, config.maxOutputChars ?? 6000),
     },
     isConcurrencySafe: () => false,
     execute: async (args, exec) => {
@@ -166,7 +159,7 @@ export function apply(ctx, config = {}) {
           return { ok: false, action: args.action, error: { code: error.code, message: error.message }, next: 'Fix the request and retry; cached data is unchanged.' }
         }
         ctx.logger?.warn?.(`report-docx: ${error.stack ?? error.message}`)
-        return { ok: false, action: args.action, error: { code: 'INTERNAL', message: error.message }, next: 'Inspect the plugin log; if this persists, run action=status to check Python and cache health.' }
+        return { ok: false, action: args.action, error: { code: 'INTERNAL', message: error.message }, next: 'Inspect the plugin log; if this persists, run action=status to check template and cache health.' }
       }
     },
   }))

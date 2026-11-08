@@ -6,8 +6,10 @@
 
 ## 能力
 
-- `report_docx` Host 工具：`status | plan | build | validate | ingest`
-- 配置驱动模板：A4 页面、页眉页脚、封面字段、一级/二级章节、任务组、表格/图片/代码块、目录字段
+- `report_docx` Host 工具：`status | plan | build | validate | template`
+- 课程模板：把以前交过的报告 DOCX 学成模板（章节骨架 + 封面字段），同一门课下次直接复用
+- 配置驱动模板：A4 页面、页眉页脚页码、目录域、封面字段、一级/二级章节、任务组、表格/图片/代码块
+- 渲染：结构化 blocks 直出 DOCX（`docx` 库），封面独立成页、图片按比例嵌入、页眉 `{{字段}}` 替换、页脚 `PAGE/NUMPAGES`、可选 TOC 域
 - 历史会话与历史 DOCX 提取：章节标题、样式、关键词、相关片段、docx 引用路径
 - 计划缓存、项目章节缓存、构建缓存、历史索引缓存
 - 增量生成：只传变化的章节，其他章节自动复用
@@ -40,6 +42,57 @@
 
 - 插件现为**纯 JavaScript 渲染，不再依赖 Python**；本文档早期版本中出现的 `renderer/report_tool.py` 描述与 Python 探测说明均已过时，请以本公告为准。
 - 修改插件源码后，需要禁用再启用插件（或重启 DSH）让宿主重新加载模块，否则仍在运行旧代码。
+
+## 更新公告（2026-11-08）：省 token + 课程模板
+
+**体积**（同一份 9 节要求，plan→build→validate 一轮）：
+
+| 返回 | 之前 | 之后 |
+| --- | --- | --- |
+| `plan` | ~1278 tok | ~600 tok |
+| `build` | ~473 tok | ~192 tok |
+| `validate` | ~1006 tok | ~88 tok |
+| 工具定义（每轮都发） | ~1180 tok | ~930 tok |
+
+做法：结果用紧凑 JSON 输出；`validate` 不再把 `checks`/`metrics`/`structure` 重复三份；`build` 返回缺失章节的 **id 列表**（以前只给数量，逼着再 plan 一次）；`plan` 去掉 `coverSources`/`candidates`/`stats`/`cache`；`status` 只留模板 id/名称/节数；参数表移除 `scope`、`ingest`、`includeSections`、`excludeSections`、`keepSectionTogether`、`templateOverrides` 与重复的 `force`。
+
+**课程模板**：先学一次，之后每门课自动用对应结构。
+
+```js
+report_docx action=template path="实验报告-UI组件分析/《人机交互和界面设计》实验报告-UI组件分析.docx" course="人机交互"
+// -> templateId=hci, saved=.dsh-report-templates/hci.json
+
+report_docx action=plan requirements="..." course="人机交互"   // via=course，按 hci 的章节和封面走
+```
+
+- 章节从旧报告的标题抽（Word 标题样式优先，否则认 `一、`/`二、`），并把字数换算成 `minWords` 预算（40–400）。
+- 封面字段按旧报告里出现过的项决定哪些必填；**只给 `course` 写默认值**，姓名/学号/日期一律不落进模板。
+- 存放位置：工作区 `.dsh-report-templates/<id>.json`（受 `templateOverlayDir` 控制）；换工作区需重新学。
+- 也兼容手写模板：直接把 JSON 丢进该目录即可，加载逻辑与内置模板一致。
+
+**渲染**：正文改为从结构化 blocks 直接出 DOCX，不再走 Markdown 往返。因此图片真正嵌入（PNG/JPEG/GIF/BMP，按原图比例缩放到 `width` 厘米宽）、封面是真的独立一页、模板里的 `styles`/`page`（字体、字号、行距、首行缩进、页边距）开始生效。
+
+**修复**：`build` 不再因为输出目录不存在而报 `RENDER_FAILED`（现在自动建目录）。
+
+### 同日第二轮：目录页 / 页眉 / 页脚页码
+
+模板里的 `toc`、`header`、`footer` 三个字段以前只是读进来存着，渲染时全部被丢弃。现在都接线了：
+
+| 模板字段 | 效果 |
+| --- | --- |
+| `toc.enabled` + `toc.minSections` | 一级章节数达到阈值时插入真实 TOC 域（`TOC \o "1-3" \h`），目录后自动分页；`options.includeToc` 可强制开关 |
+| `header.enabled` + `header.text` | 页眉右对齐、小字号、带下边框；`{{course}}`/`{{experiment}}`/`{{name}}`… 用封面字段替换，缺失就留空 |
+| `footer.enabled` + `footer.pageNumber` | 页脚居中「第 X 页 / 共 Y 页」，用 `PAGE`/`NUMPAGES` 域 |
+
+顺带修了三处：
+
+1. 页面边距参数名写错（`margins` 应为 `margin`），模板里的页边距**从未生效过**，一直用的默认值；现在 A4 尺寸（11906×16838 twips）、横竖版、页眉页脚距都按模板来。
+2. 封面页不再重复显示页眉页脚（`titlePage` + 空首页页眉）。
+3. 文档写入 `updateFields=true`，Word 打开时会提示更新域，目录和页码随即刷新。
+
+> 目录页码由 Word 排版时计算，纯 JS 无法预知；WPS/Word 首次打开请允许更新域（或右键目录 →「更新域」），否则目录只显示标题不显示页码。其他查看器（如网页预览）通常直接显示为「未更新」。
+
+**仍未做**：模板里的 `styles.xml`/`sectPr` 还没有从旧 DOCX 里抽取，所以「每门课字体排版完全不一样」仍需手改 JSON。
 
 ## 安装
 
@@ -100,7 +153,7 @@ plugin_manager action=install_bundle target=D:\deepseek-harness\default-workspac
 report_docx action=status
 ```
 
-返回模板清单、Python 状态、缓存目录、历史索引摘要与当前配置。
+返回模板清单（含已学的课程模板 `course`/`from`）、默认模板、历史索引摘要。
 
 ### 2. 生成计划
 
@@ -170,6 +223,8 @@ report_docx action=build planId="rpt_xxx" outPath="reports/example.docx" section
 - `note`：提示性段落
 - `blocks`：上述 block 的显式数组
 
+篇幅够长时是否插目录由模板的 `toc.enabled` + `toc.minSections` 决定；单次强制开关用 `options={ "includeToc": true }`（或 `false`）。
+
 ### 4. 增量生成
 
 同一 `planId` 再次 build 时，只传变化的章节：
@@ -190,13 +245,17 @@ report_docx action=validate path="reports/example.docx" planId="rpt_xxx"
 
 带 `planId` 时按计划校验；不带时做通用结构校验。
 
-### 6. 历史提取
+### 6. 学习课程模板
 
 ```jsonc
-report_docx action=ingest scope="all" force=true
+report_docx action=template path="过去的某门课实验报告.docx" course="人机交互"
 ```
 
-`scope` 可选 `all | workspace | sessions`。历史索引缓存有效期为 24 小时；工作区 DOCX 的时间戳或大小变化会触发重新扫描，会话日志变化不触发频繁全量扫描。
+从旧报告抽章节骨架与封面字段，写到 `.dsh-report-templates/<id>.json`；`id` 由课程名决定（常见课程有固定缩写：`hci`/`se`/`os`/`ai`/`javaee`…），也可用 `templateId` 指定。同一课程再学一次会递增 `version`。
+
+之后 `plan` 只要带 `course`（或不带也行——要求文本里的“课程名称：”会被识别），就会命中该课程模板，返回 `via: "course"`。同名课程模板与关键词打分的优先级：显式 `templateId` > 课程名匹配 > 关键词 > 默认模板。
+
+历史索引仍会自动扫描旧 DOCX 用于章节/关键词统计（缓存 24 小时），但 `ingest` 动作已移除：`action=status` 或任意 `plan` 会按需刷新，`force: true` 可强制重扫。
 
 ## 模板
 
@@ -266,12 +325,14 @@ dsh-report-plugin/
   renderer/report_tool.py
   src/
     plugin.js     # DSH apply/tool/system prompt
-    engine.js     # status/plan/build/validate/ingest
+    engine.js     # status/plan/build/validate/template
+    learn.js      # 课程 DOCX -> 模板 JSON
     config.js     # 配置默认值、规范化、Python 探测
     templates.js  # 内置/扩展/覆盖模板加载与校验
     plan.js       # 要求解析、模板评分、章节计划
     content.js    # 章节规范化、去重、占位符、渲染负载
-    render.js     # Node/Python 进程契约
+    markdown2docx.js # blocks -> DOCX 渲染 + 纯 JS DOCX 检查
+    render.js     # Node/Python 进程契约（v0.2.0 起不再使用）
     validate.js   # 输出校验
     history.js    # 历史 DOCX 与 session 提取
     cache.js      # 磁盘缓存布局

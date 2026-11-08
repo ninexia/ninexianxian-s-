@@ -49,3 +49,8 @@ desktop.ini
 # 工作区报告
 reports/
 实验报告-UI组件分析/
+
+# 插件测试产物与按课程学到的模板
+dsh-report-plugin/tests/.cache/
+dsh-report-plugin/tests/out/
+.dsh-report-templates/
