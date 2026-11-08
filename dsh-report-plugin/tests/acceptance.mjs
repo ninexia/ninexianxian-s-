@@ -91,6 +91,20 @@ try {
     assert.equal(inspected.structure.images, 1)
     console.log('build ok:', build.path, JSON.stringify(inspected.structure))
 
+    const outline = await engine.search({ path: build.path, mode: 'outline' })
+    assert.ok(outline.headings >= 3)
+    assert.ok(outline.items.every((item) => item.title && item.words >= 0))
+    const found = await engine.search({ path: build.path, mode: 'text', query: '缓存' })
+    assert.ok(found.total >= 1)
+    assert.ok(found.hits[0].snippet.length > 0)
+    const miss = await engine.search({ path: build.path, mode: 'text', query: '不会出现的词' })
+    assert.equal(miss.total, 0)
+    assert.ok(miss.hint)
+    const single = await engine.search({ path: build.path, mode: 'section', query: '实验目的' })
+    assert.ok(single.text.length > 0)
+    assert.equal(single.truncated, false)
+    console.log('search ok:', outline.headings, 'headings,', found.total, 'hits,', single.words, 'words in one section')
+
     const incremental = await engine.build({
       planId: plan.planId,
       sections: { summary: ['更新后的总结：复用已验证章节，仅重写总结。'] },

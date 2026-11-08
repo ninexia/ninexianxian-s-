@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-report-docx",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Markdown template-driven DOCX experiment report generator for DeepSeek Harness (no Python dependency)",
   "type": "module",

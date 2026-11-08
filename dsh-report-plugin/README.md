@@ -8,6 +8,7 @@
 
 - `report_docx` Host 工具：`status | plan | build | validate | template`
 - 课程模板：把以前交过的报告 DOCX 学成模板（章节骨架 + 封面字段），同一门课下次直接复用
+- 文档检索：`action=search` 支持看大纲、按关键词取片段、只读某一节，不用把整份 DOCX 灌进上下文
 - 配置驱动模板：A4 页面、页眉页脚页码、目录域、封面字段、一级/二级章节、任务组、表格/图片/代码块
 - 渲染：结构化 blocks 直出 DOCX（`docx` 库），封面独立成页、图片按比例嵌入、页眉 `{{字段}}` 替换、页脚 `PAGE/NUMPAGES`、可选 TOC 域
 - 历史会话与历史 DOCX 提取：章节标题、样式、关键词、相关片段、docx 引用路径
@@ -256,6 +257,34 @@ report_docx action=template path="过去的某门课实验报告.docx" course="�
 之后 `plan` 只要带 `course`（或不带也行——要求文本里的“课程名称：”会被识别），就会命中该课程模板，返回 `via: "course"`。同名课程模板与关键词打分的优先级：显式 `templateId` > 课程名匹配 > 关键词 > 默认模板。
 
 历史索引仍会自动扫描旧 DOCX 用于章节/关键词统计（缓存 24 小时），但 `ingest` 动作已移除：`action=status` 或任意 `plan` 会按需刷新，`force: true` 可强制重扫。
+
+### 7. 检索文档内容
+
+读一份旧报告不需要把整份正文搬进上下文，按需取三档：
+
+```jsonc
+// 只看结构：章节、层级、每节字数
+report_docx action=search path="实验报告.docx" mode="outline"
+
+// 找关键词：返回命中段落 + 所在章节 + 前后 60 字片段
+report_docx action=search path="实验报告.docx" query="并发 锁"          // 空格=AND
+report_docx action=search path="实验报告.docx" query="并发" limit=3 offset=6
+
+// 只读某一节：按标题模糊命中，返回该节正文（默认上限 2000 字）
+report_docx action=search path="实验报告.docx" mode="section" query="实验总结"
+```
+
+实测（15,059 字的《人机交互和界面设计》实验报告）：
+
+| 方式 | 进入上下文的量 |
+| --- | --- |
+| 整份正文 | 18,963 字符 ≈ 12,886 tok |
+| `mode=outline` | 408 字符 ≈ **147 tok**（5 节 + 每节字数） |
+| `mode=text`（"AI"，11 命中取 6） | 686 字符 ≈ **292 tok** |
+| `mode=section`（实验总结） | 988 字符 ≈ 606 tok |
+
+- 文件仍在本地整体解析（不花 token），只有命中的片段返回；解析器在文档没有 Word 标题样式时按 `一、`/`第X章` 猜一层标题。
+- 命中为空会返回 `hint`；`next: "offset=N"` 表示还有下一页。
 
 ## 模板
 

@@ -10,6 +10,7 @@ import { buildRenderSections, normalizeSectionsInput } from './content.js'
 import { inspectDocx, sectionsToDocx } from './markdown2docx.js'  // 使用纯 JS 的 inspect + 结构直渲染
 import { validateBuild } from './validate.js'
 import { ingestHistory } from './history.js'
+import { outlineOf, readSection, searchText } from './search.js'
 import {
   dateStamp,
   deepMerge,
@@ -475,6 +476,54 @@ export class Engine {
       saved: relative(this.workspace, saved).replace(/\\/g, '/'),
       next: `Template ${learned.id} is ready. Call action=plan with the requirements (course="${learned.course?.name ?? ''}") to use it.`,
     }
+  }
+
+  // 只看需要的部分：目录大纲、关键词命中片段、某一节全文
+  async search({ path, mode = 'text', query, limit = 6, offset = 0 } = {}) {
+    if (!path) throw new ReportError('PATH_REQUIRED', 'path is required for action=search')
+    const target = isAbsolute(path) ? resolve(path) : resolve(this.workspace, path)
+    if (!fileExists(target)) throw new ReportError('FILE_NOT_FOUND', `DOCX not found: ${target}`)
+    const inspect = await inspectDocx(target)
+    if (!inspect.ok) throw new ReportError('INSPECT_FAILED', inspect.error ?? 'inspect failed')
+    const shown = relative(this.workspace, target).replace(/\\/g, '/')
+    const page = Math.max(1, Math.min(20, Number(limit) || 6))
+    const start = Math.max(0, Number(offset) || 0)
+
+    if (mode === 'outline') {
+      const items = outlineOf(inspect)
+      return {
+        ok: true,
+        action: 'search',
+        mode,
+        path: shown,
+        headings: items.length,
+        words: inspect.words,
+        items,
+      }
+    }
+
+    if (mode === 'section') {
+      const section = readSection(inspect, query)
+      if (!section) {
+        const titles = outlineOf(inspect).slice(0, 12).map((item) => item.title)
+        throw new ReportError('SECTION_NOT_FOUND', `no heading matches "${query}"; headings: ${titles.join(' | ')}`)
+      }
+      return { ok: true, action: 'search', mode, path: shown, ...section }
+    }
+
+    const result = searchText(inspect, query, { limit: page, offset: start })
+    const payload = {
+      ok: true,
+      action: 'search',
+      mode: 'text',
+      path: shown,
+      query,
+      total: result.total,
+      hits: result.hits,
+    }
+    if (result.hasMore) payload.next = `offset=${result.offset + result.hits.length}`
+    if (!result.total) payload.hint = 'No match. Try fewer words (space = all must match), or mode=outline to list section titles.'
+    return payload
   }
 
   async ingest({ scope = 'all', force = true } = {}) {

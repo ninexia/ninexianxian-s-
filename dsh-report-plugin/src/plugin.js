@@ -8,7 +8,7 @@ export const inject = ['tools']
 
 const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-const ACTION_VALUES = ['status', 'plan', 'build', 'validate', 'template']
+const ACTION_VALUES = ['status', 'plan', 'build', 'validate', 'template', 'search']
 
 const PARAMETERS = {
   type: 'object',
@@ -18,7 +18,7 @@ const PARAMETERS = {
     action: {
       type: 'string',
       enum: ACTION_VALUES,
-      description: 'status=list templates; plan=requirements -> section ids; build=render DOCX; validate=inspect a DOCX; template=learn a course template from a past DOCX.',
+      description: 'status=list templates; plan=requirements -> section ids; build=render DOCX; validate=inspect a DOCX; template=learn a course template from a past DOCX; search=read part of a DOCX.',
     },
     requirements: {
       type: 'string',
@@ -52,8 +52,19 @@ const PARAMETERS = {
     },
     path: {
       type: 'string',
-      description: 'DOCX path: the source report for action=template, the file to inspect for action=validate.',
+      description: 'DOCX path: source report for action=template, file to inspect for action=validate, file to read for action=search.',
     },
+    query: {
+      type: 'string',
+      description: 'action=search: what to find. mode=text matches paragraphs (space-separated words must all appear), mode=section reads the section whose title contains it. Omit for mode=outline.',
+    },
+    mode: {
+      type: 'string',
+      enum: ['outline', 'text', 'section'],
+      description: 'action=search: outline=heading list with word counts; text=matching snippets; section=full text of one section. Default text.',
+    },
+    limit: { type: 'number', description: 'action=search: max hits per call (default 6).' },
+    offset: { type: 'number', description: 'action=search: skip this many hits, for paging.' },
     options: {
       type: 'object',
       additionalProperties: false,
@@ -120,6 +131,14 @@ async function dispatch(engine, args) {
     case 'validate':
       if (!args.path) throw new ReportError('PATH_REQUIRED', 'path is required for action=validate')
       return engine.validate({ path: args.path, planId: args.planId })
+    case 'search':
+      return engine.search({
+        path: args.path,
+        mode: args.mode,
+        query: args.query,
+        limit: args.limit,
+        offset: args.offset,
+      })
     case 'template':
       return engine.learn({
         path: args.path,
@@ -139,7 +158,7 @@ export function apply(ctx, config = {}) {
 
   ctx.effect(() => tools.register({
     name: 'report_docx',
-    description: 'Generate, extend, or validate an experiment-report DOCX that follows a course template. Learns a template from a past DOCX, plans sections from the requirements, builds with per-section content, then validates. Never invents experimental evidence.',
+    description: 'Generate, extend, or validate an experiment-report DOCX that follows a course template. Learns a template from a past DOCX, plans sections from the requirements, builds with per-section content, then validates. Also reads an existing DOCX by outline, keyword snippets, or a single section instead of loading the whole file. Never invents experimental evidence.',
     parameters: PARAMETERS,
     output: {
       schema: OUTPUT_SCHEMA,
