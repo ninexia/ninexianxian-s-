@@ -152,7 +152,7 @@ export class Engine {
   }
 
   renderer() {
-    // v0.2.0: documents are rendered in-process by src/markdown2docx.js.
+    // v0.3.0: documents are rendered in-process by src/markdown2docx.js.
     return { ok: true, engine: 'markdown2docx', dependency: 'docx' }
   }
 
@@ -318,7 +318,7 @@ export class Engine {
       .map((section) => section.id)
     const outputPath = this.resolveOutputPath(outPath, plan)
     const buildHash = sha256({
-      rendererVersion: '0.2.0',
+      rendererVersion: '0.3.0',
       planId: plan.planId,
       templateDigest: plan.templateDigest,
       sectionHashes: Object.fromEntries(built.sections.map((section) => [section.id, sha256(section.blocks).slice(0, 16)])),

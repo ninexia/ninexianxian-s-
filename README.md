@@ -8,7 +8,41 @@
 
 ## 版本与更新
 
-当前版本：**v0.2.0**（Markdown 模板 + 纯 JS 渲染）
+当前版本：**v0.3.0**（课程模板 + 结构直渲染 + 目录页/页眉页脚）
+
+### v0.3.0（2026-11-08）
+
+**按课程学模板**：把以前交过的某门课报告 DOCX 喂给 `action=template`，抽出章节骨架与封面字段存成模板；之后同一门课的报告直接复用该结构。
+
+```js
+report_docx action=template path="某门课的旧实验报告.docx" course="人机交互"
+report_docx action=plan requirements="..." course="人机交互"   // 自动命中 hci 模板
+```
+
+- 章节：Word 标题样式优先，否则识别 `一、`/`二、`；字数换算成每节预算（40–400）。
+- 封面：只把课程名写成默认值，姓名/学号/日期一律不落进模板。
+- 位置：工作区 `.dsh-report-templates/<id>.json`，也接受手写 JSON。
+
+**渲染重构**：正文从结构化 blocks 直出 DOCX，不再走 Markdown 往返。
+
+| 能力 | v0.2.0 | v0.3.0 |
+| --- | --- | --- |
+| 图片 | 仅输出「（图：…）」占位 | 真正嵌入（PNG/JPEG/GIF/BMP，按比例缩放） |
+| 封面 | 五行引用块挤在正文开头 | 独立成页，字号/字段按模板 |
+| 页眉 | 丢弃 | 右对齐 + 下边框，`{{course}}` 等占位替换 |
+| 页脚 | 丢弃 | 「第 X 页 / 共 Y 页」（PAGE/NUMPAGES 域） |
+| 目录 | 丢弃 | `toc.enabled` 达标时插入 TOC 域 + 自动分页 |
+| 页面 | 边距参数名写错，模板值从未生效 | A4/横竖版/页边距/页眉页脚距按模板 |
+
+**输出体积**：同一份要求跑 `plan → build → validate`，返回 token 从 ~2757 降到 ~881（-68%）；工具定义从 ~1180 降到 ~930。
+
+- 结果改紧凑 JSON；`validate` 不再三份重复；`build` 返回缺失章节 **id 列表**（以前只给数量）；
+- `status`/`plan` 去掉 `description`、`coverSources`、`candidates`、`stats`、`cache`；
+- 参数表移除 `scope`、`ingest`、`includeSections`、`excludeSections`、`keepSectionTogether`、`templateOverrides` 与重复的 `force`。
+
+**修复**：`build` 输出目录不存在时不再报 `RENDER_FAILED`；封面页不再重复页眉页脚（`titlePage`）；写入 `updateFields` 让 Word 打开时刷新目录域。
+
+> 目录页码要由 Word/WPS 排版时计算，首次打开请允许「更新域」。
 
 ### v0.1.0 → v0.2.0 对比
 
@@ -32,9 +66,9 @@
 
 ### 保持不变
 
-`report_docx` 的五个动作（`status | plan | build | validate | ingest`）、模板 registry 与覆盖机制、计划/项目/构建/历史四级缓存、段落级去重、输出校验规则、工作区安全边界。
+`report_docx` 的动作集合（v0.3.0 为 `status | plan | build | validate | template`；`ingest` 已并入 `status`/`plan` 的按需刷新）、模板 registry 与覆盖机制、计划/项目/构建/历史四级缓存、段落级去重、输出校验规则、工作区安全边界。
 
-### v0.2.0 已知限制
+### v0.2.0 已知限制（v0.3.0 已修复大部分）
 
 - **图片不内嵌**：Markdown 路径目前不会把图片写入 DOCX，仅在有 `caption` 时输出“（图：…）”占位文字；需要真实嵌图请暂用 v0.1.0 或等后续版本。
 - `src/render.js`、`renderer/report_tool.py` 是 v0.1.0 遗留代码，v0.2.0 不再调用（保留以便回退）。
@@ -63,9 +97,10 @@ v0.2.0 发布之初，`markdown2docx` 渲染链路存在多处缺陷，插件可
 
 ## 能力
 
-- `report_docx` Host 工具：`status | plan | build | validate | ingest`
-- Markdown 模板：章节内容以 Markdown 组织，Token 消耗更低、便于版本控制
-- 模板驱动排版：A4 页面、页眉页脚、封面字段、一级/二级章节、任务组、表格/图片/代码块、目录字段
+- `report_docx` Host 工具：`status | plan | build | validate | template`
+- 课程模板：把旧报告 DOCX 学成模板，同一门课下次直接用它的章节与封面
+- 结构直渲染：封面独立成页、图片真嵌入、页眉页脚页码、可选目录域
+- 模板驱动排版：A4 页面、页眉页脚、目录、封面字段、一级/二级章节、任务组、表格/图片/代码块
 - 历史会话与历史 DOCX 提取：章节标题、样式、关键词、相关片段、docx 引用路径
 - 计划缓存、项目章节缓存、构建缓存、历史索引缓存
 - 增量生成：只传变化的章节，其他章节自动复用
