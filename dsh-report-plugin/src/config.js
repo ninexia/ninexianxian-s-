@@ -139,9 +139,6 @@ export function resolveConfig(raw, { workspace, packageDir }) {
 
   const problems = []
   if (!existsSync(config.workspace)) problems.push(`workspace does not exist: ${config.workspace}`)
-  if (!existsSync(config.rendererPath)) problems.push(`renderer not found: ${config.rendererPath}`)
-  if (config.pythonPath.includes('/') || config.pythonPath.includes('\\')) {
-    if (!existsSync(config.pythonPath)) problems.push(`python not found: ${config.pythonPath}`)
-  }
+  // rendererPath / pythonPath 是 v0.1.0 的 Python 渲染链路遗留配置，当前渲染在进程内完成，不再校验
   return { config, problems }
 }

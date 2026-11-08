@@ -76,14 +76,12 @@ report_docx action=plan requirements="..." course="人机交互"   // 自动命�
 
 ### 保持不变
 
-`report_docx` 的动作集合（v0.3.0 为 `status | plan | build | validate | template`；`ingest` 已并入 `status`/`plan` 的按需刷新）、模板 registry 与覆盖机制、计划/项目/构建/历史四级缓存、段落级去重、输出校验规则、工作区安全边界。
+`report_docx` 的动作集合（v0.4.0 为 `status | plan | build | validate | template | search`；`ingest` 已并入 `status`/`plan` 的按需刷新）、模板 registry 与覆盖机制、计划/项目/构建/历史四级缓存、段落级去重、输出校验规则、工作区安全边界。
 
-### v0.2.0 已知限制（v0.3.0 已修复大部分）
+### 历史遗留（v0.3.0 起不再使用）
 
-- **图片不内嵌**：Markdown 路径目前不会把图片写入 DOCX，仅在有 `caption` 时输出“（图：…）”占位文字；需要真实嵌图请暂用 v0.1.0 或等后续版本。
-- `src/render.js`、`renderer/report_tool.py` 是 v0.1.0 遗留代码，v0.2.0 不再调用（保留以便回退）。
-- `config.pythonPath` 仍可配置，但 v0.2.0 不生效。
-- `tests/acceptance.mjs` 按 v0.1.0 行为编写，v0.2.0 需重跑并按需调整断言。
+- `src/render.js`、`renderer/report_tool.py`、`src/schema.js` 是 v0.1.0/v0.2.0 遗留代码，保留以便回退，当前链路不调用。
+- `config.pythonPath`、`config.rendererPath` 仍可配置，但不会校验、也不会生效。
 
 ### v0.2.0 修复公告（2026-10-25）
 
@@ -176,7 +174,7 @@ plugin_manager action=install_bundle target=D:\deepseek-harness\default-workspac
 report_docx action=status
 ```
 
-返回模板清单、渲染器信息、缓存目录、历史索引摘要与当前配置。
+返回默认模板、模板清单（含已学课程模板的 `course` 与来源 `from`）、历史索引摘要，以及下一步提示。`force: true` 会强制重扫历史索引。
 
 ### 2. 生成计划
 
@@ -232,10 +230,12 @@ report_docx action=build planId="rpt_xxx" outPath="reports/example.docx" section
 - 字符串数组 / `paragraphs`：普通段落
 - `bullets` / `numbered`：列表
 - `table`：`caption` + `headers` + `rows`
-- `image`：`path` + `caption` + 可选 `width`（v0.2.0 仅输出标题占位，见已知限制）
+- `image`：`path` + `caption` + 可选 `width`（厘米，按原图比例缩放）
 - `code`：`caption` + `text`
 - `note`：提示性段落
 - `blocks`：上述 block 的显式数组
+
+篇幅够长时是否插目录由模板的 `toc.enabled` + `toc.minSections` 决定；单次强制开关用 `options={ "includeToc": true }`（或 `false`）。
 
 ### 4. 增量生成
 
@@ -329,22 +329,19 @@ report_docx action=search path="实验报告.docx" mode="section" query="实验�
 }
 ```
 
-## 验收清单
+## 验收
 
-v0.1.0 已验证项（v0.2.0 需重跑）：
+离线跑一遍（不联网）：`node dsh-report-plugin/tests/acceptance.mjs`，当前覆盖：
 
-- [x] 模板清单可用
-- [x] `plan` 能提取封面、任务并选择 `lab-report`
-- [x] `build` 能渲染段落、列表、表格、代码、图片，并通过校验
-- [x] 增量 build 复用章节，只重传变化章节
-- [x] 相同输入命中构建缓存
-- [x] 未知 section id 产生警告
-- [x] 输出路径越界被拒绝
-- [x] 需求分析要求选择 `requirements-analysis`
-- [x] 跨节重复段落被去除
-- [x] 历史索引扫描后第二次命中缓存
-
-v0.2.0 待验证：`status` 渲染器字段、Markdown 序列化（列表/表格/代码块）、`docx` 依赖安装、构建缓存失效。
+- `status` 列出内置模板与默认模板
+- `plan` 提取封面、任务分节、选择模板
+- `build` 渲染段落 / 列表 / 表格 / 代码 / 图片，并通过校验
+- 增量 build 复用章节，相同输入命中构建缓存
+- 未知 section id 告警、输出路径越界被拒绝
+- 跨节重复段落被去除
+- 历史索引扫描后第二次命中缓存
+- 学模板 → 同课程命中（`via=course`）→ 出报告
+- `search` 的 outline / 关键词命中 / 无命中提示 / 单节读取
 
 ## 目录结构
 
