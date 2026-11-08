@@ -21,7 +21,6 @@
     "icon.svg",
     "cordis.patch.yml",
     "config.schema.json",
-    "README.md",
     "DESIGN.md",
     "tests/*.mjs",
     "tests/fixtures/*"

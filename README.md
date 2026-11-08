@@ -10,6 +10,8 @@
 
 当前版本：**v0.4.0**（课程模板 + 结构直渲染 + 目录页/页眉页脚 + 文档检索）
 
+> 版本号约定：日常小改动按 patch 递增（v0.4.1、v0.4.2…），只有接口或结构明显变化时才升 minor。
+
 ### v0.4.0（2026-11-08）：按需读文档
 
 新增 `action=search`：读旧报告时不再把整份正文塞进上下文，按需取三档——`outline` 看章节结构、`text` 取关键词命中片段、`section` 只读某一节全文。
@@ -255,13 +257,45 @@ report_docx action=validate path="reports/example.docx" planId="rpt_xxx"
 
 带 `planId` 时按计划校验；不带时做通用结构校验。
 
-### 6. 历史提取
+### 6. 学习课程模板
 
 ```jsonc
-report_docx action=ingest scope="all" force=true
+report_docx action=template path="过去的某门课实验报告.docx" course="人机交互"
 ```
 
-`scope` 可选 `all | workspace | sessions`。历史索引缓存有效期 24 小时；工作区 DOCX 的时间戳或大小变化会触发重新扫描。
+从旧报告抽章节骨架与封面字段，写到 `.dsh-report-templates/<id>.json`；`id` 由课程名决定（常见课程有固定缩写：`hci`/`se`/`os`/`ai`/`javaee`…），也可用 `templateId` 指定。同一课程再学一次会递增 `version`。
+
+之后 `plan` 只要带 `course`（或不带也行——要求文本里的“课程名称：”会被识别），就会命中该课程模板，返回 `via: "course"`。优先级：显式 `templateId` > 课程名匹配 > 关键词打分 > 默认模板。
+
+历史索引仍会自动扫描旧 DOCX 用于章节/关键词统计（缓存 24 小时）；`ingest` 动作已并入 `status`/`plan` 的按需刷新，`force: true` 可强制重扫。
+
+### 7. 检索文档内容
+
+读一份旧报告不需要把整份正文搬进上下文，按需取三档：
+
+```jsonc
+// 只看结构：章节、层级、每节字数
+report_docx action=search path="实验报告.docx" mode="outline"
+
+// 找关键词：返回命中段落 + 所在章节 + 前后 60 字片段
+report_docx action=search path="实验报告.docx" query="并发 锁"          // 空格=AND
+report_docx action=search path="实验报告.docx" query="并发" limit=3 offset=6
+
+// 只读某一节：按标题模糊命中，返回该节正文（默认上限 2000 字）
+report_docx action=search path="实验报告.docx" mode="section" query="实验总结"
+```
+
+实测（15,059 字的《人机交互和界面设计》实验报告）：
+
+| 方式 | 进入上下文的量 |
+| --- | --- |
+| 整份正文 | 18,963 字符 ≈ 12,886 tok |
+| `mode=outline` | 408 字符 ≈ **147 tok**（5 节 + 每节字数） |
+| `mode=text`（"AI"，11 命中取 6） | 686 字符 ≈ **292 tok** |
+| `mode=section`（实验总结） | 988 字符 ≈ 606 tok |
+
+- 文件仍在本地整体解析（不花 token），只有命中的片段返回；文档没有 Word 标题样式时按 `一、`/`第X章` 推断层级。
+- 命中为空会返回 `hint`；`next: "offset=N"` 表示还有下一页。
 
 ## 模板
 
@@ -274,6 +308,8 @@ report_docx action=ingest scope="all" force=true
 | `requirements-analysis` | 需求分析/建模实验报告 |
 
 自定义模板放在 `templateDir`，文件名即模板 id，schema 见 [templates/template.schema.json](dsh-report-plugin/templates/template.schema.json)。覆盖目录中与内置模板同 id 的 JSON 会与内置模板做浅合并，适合“默认模板 + 少量章节覆盖”。
+
+`action=template` 学到的课程模板同样落在 `.dsh-report-templates/`，格式与手写模板完全一致，可以手动改；这些是工作区级数据，已加入 `.gitignore`，不会随仓库提交。
 
 最小模板示例：
 
@@ -324,10 +360,9 @@ dsh-report-plugin/        # 插件本体
   icon.svg
   locale/en.json
   locale/zh.json
-  README.md               # 详细使用说明
   DESIGN.md               # 设计文档
   templates/
-    report.md             # v0.2.0 新增 Markdown 模板
+    report.md             # Markdown 模板（v0.2.0 遗留，现走结构直渲染）
     registry.json
     template.schema.json
     lab-report.json
@@ -335,8 +370,10 @@ dsh-report-plugin/        # 插件本体
     requirements-analysis.json
   src/
     plugin.js             # DSH apply / tool / system prompt
-    engine.js             # status/plan/build/validate/ingest
-    markdown2docx.js      # v0.2.0 新增：Markdown → DOCX
+    engine.js             # status/plan/build/validate/template/search
+    learn.js              # 课程 DOCX -> 模板 JSON
+    search.js             # DOCX 大纲 / 片段检索 / 单节读取
+    markdown2docx.js      # blocks -> DOCX 渲染 + 纯 JS DOCX 检查
     config.js             # 配置默认值、规范化
     templates.js          # 内置/扩展/覆盖模板加载与校验
     plan.js               # 要求解析、模板评分、章节计划
@@ -346,9 +383,9 @@ dsh-report-plugin/        # 插件本体
     cache.js              # 磁盘缓存布局
     util.js
     schema.js
-    render.js             # v0.1.0 遗留（v0.2.0 不再调用）
+    render.js             # v0.1.0 遗留（v0.2.0 起不再调用）
   renderer/
-    report_tool.py        # v0.1.0 遗留（v0.2.0 不再调用）
+    report_tool.py        # v0.1.0 遗留（v0.2.0 起不再调用）
   tests/
     acceptance.mjs
     smoke.mjs
@@ -358,7 +395,6 @@ dsh-report-plugin/        # 插件本体
 
 ## 文档
 
-- 详细使用说明：[dsh-report-plugin/README.md](dsh-report-plugin/README.md)
 - 设计文档：[dsh-report-plugin/DESIGN.md](dsh-report-plugin/DESIGN.md)
 - 配置字段：[dsh-report-plugin/config.schema.json](dsh-report-plugin/config.schema.json)
 - 模板格式：[dsh-report-plugin/templates/template.schema.json](dsh-report-plugin/templates/template.schema.json)
