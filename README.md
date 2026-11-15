@@ -299,6 +299,7 @@ dsh-report-plugin/        # 插件本体
     history.js            # 历史 DOCX 与 session 提取
     cache.js              # 磁盘缓存布局
     util.js
+    schema.js             # 对外导出的 Config 校验定义
     render.js             # v0.1.0 遗留（v0.2.0 起不再调用）
   renderer/
     report_tool.py        # v0.1.0 遗留（v0.2.0 起不再调用）

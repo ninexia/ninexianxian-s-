@@ -8,7 +8,7 @@
 - 文档：修正 `status` 返回、`image` block、验收清单中与实现不符的描述；补回 `options.includeToc`
 - 文档：DESIGN.md 重写为当前架构（结构直渲染 + 课程模板 + 文档检索）
 - 修复：`config.js` 不再强制校验 `renderer/report_tool.py` 与 Python 是否存在——v0.3 起渲染在进程内完成，缺文件不应导致初始化失败
-- 清理：删除未被引用的 `src/schema.js`
+- 修复：`src/schema.js` 曾被误删（当时只搜了 `src/` 内部引用，漏掉根目录 `index.js` 的 `export { Config }`），导致整个插件 `ERR_MODULE_NOT_FOUND` 加载失败；已恢复
 
 ## v0.4.0（2026-11-08）：按需读文档
 
